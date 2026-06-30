@@ -9,7 +9,7 @@ Add to `mix.exs`:
 ```elixir
 def deps do
   [
-    {:mercadopago, "~> 0.1.0"}
+    {:mercadopago_sdk_elixir, "~> 0.1.0"}
   ]
 end
 ```

@@ -20,7 +20,7 @@ erl_crash.dump
 *.ez
 
 # Ignore package tarball (built via "mix hex.build").
-mercadopago-*.tar
+mercadopago_sdk_elixir-*.tar
 
 # Language-server workspace caches (machine-local).
 /.expert/

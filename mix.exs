@@ -5,7 +5,7 @@ defmodule Mercadopago.MixProject do
 
   def project do
     [
-      app: :mercadopago,
+      app: :mercadopago_sdk_elixir,
       version: "0.1.0",
       elixir: "~> 1.15",
       start_permanent: Mix.env() == :prod,
@@ -22,7 +22,7 @@ defmodule Mercadopago.MixProject do
 
   defp package do
     [
-      name: "mercadopago",
+      name: "mercadopago_sdk_elixir",
       licenses: ["MIT"],
       links: %{
         "GitHub" => @source_url,
