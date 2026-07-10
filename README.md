@@ -118,19 +118,25 @@ ACCESS_TOKEN=APP_USR_xxx mix test --include integration --include test
 ## Webhook validation
 
 ```elixir
-Mercadopago.Webhook.Validator.validate(
-  x_signature,    # "ts=...;v1=..." header from MercadoPago
-  x_request_id,   # x-request-id header
-  data_id,        # params["data"]["id"] from the webhook body
-  secret          # your webhook secret from the MercadoPago dashboard
-)
-# => :ok | raises Mercadopago.Webhook.InvalidSignatureError
+case Mercadopago.Webhook.Validator.validate(
+       x_signature,    # "ts=...,v1=..." header from MercadoPago
+       x_request_id,   # x-request-id header
+       data_id,        # params["data"]["id"] from the webhook body
+       secret          # your webhook secret from the MercadoPago dashboard
+     ) do
+  {:ok, _ts} -> :ok
+  {:error, %Mercadopago.Webhook.Validator.InvalidSignatureError{} = e} -> handle_error(e)
+end
 ```
 
 Timestamp drift tolerance (default: no check):
 
 ```elixir
 Mercadopago.Webhook.Validator.validate(x_sig, x_req, data_id, secret,
-  max_age_seconds: 300
+  tolerance_seconds: 300
 )
 ```
+
+Raising variant (`validate!/5`) is also available — raises
+`Mercadopago.Webhook.Validator.InvalidSignatureError` on failure instead of
+returning `{:error, _}`.
