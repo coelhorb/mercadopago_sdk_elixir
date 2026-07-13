@@ -9,6 +9,24 @@ defmodule Mercadopago.Order do
     HTTP.post(client, "/v1/orders", order_data, opts)
   end
 
+  @doc """
+  Creates a Checkout Pro order.
+
+  Convenience wrapper over `create/3` that applies the Checkout Pro Orders API
+  defaults: `type` `"online"` and `processing_mode` `"manual"` when omitted.
+  If those fields are provided (atom or string key), they must already match
+  the Checkout Pro flow; otherwise an `ArgumentError` is raised.
+  """
+  @spec create_checkout_pro(Client.t(), map(), keyword()) :: HTTP.response()
+  def create_checkout_pro(%Client{} = client, order_data, opts \\ []) when is_map(order_data) do
+    checkout_pro_data =
+      order_data
+      |> put_checkout_pro_default!(:type, "online")
+      |> put_checkout_pro_default!(:processing_mode, "manual")
+
+    HTTP.post(client, "/v1/orders", checkout_pro_data, opts)
+  end
+
   @doc "Fetches an order by id."
   @spec get(Client.t(), String.t(), keyword()) :: HTTP.response()
   def get(%Client{} = client, order_id, opts \\ []) do
@@ -43,5 +61,20 @@ defmodule Mercadopago.Order do
   @spec search(Client.t(), map() | nil, keyword()) :: HTTP.response()
   def search(%Client{} = client, filters \\ nil, opts \\ []) do
     HTTP.get(client, "/v1/orders", filters, opts)
+  end
+
+  defp put_checkout_pro_default!(order_data, field, expected) do
+    value = Map.get(order_data, field, Map.get(order_data, to_string(field)))
+
+    cond do
+      not (is_nil(value) or value == expected) ->
+        raise ArgumentError, "Param #{field} must be #{expected}"
+
+      Map.has_key?(order_data, field) or Map.has_key?(order_data, to_string(field)) ->
+        order_data
+
+      true ->
+        Map.put(order_data, field, expected)
+    end
   end
 end

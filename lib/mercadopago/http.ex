@@ -1,5 +1,16 @@
 defmodule Mercadopago.HTTP do
-  @moduledoc "Req-based HTTP transport. Retries GET on transient errors; no retry for mutating verbs."
+  @moduledoc """
+  Req-based HTTP transport. Retries GET on transient errors; no retry for
+  mutating verbs.
+
+  All functions accept per-call `opts` overriding the client configuration:
+
+    * `:access_token` - token for this request only
+    * `:custom_headers` - headers merged over the client's `custom_headers`,
+      overriding generated headers case-insensitively
+    * `:timeout` - receive timeout in milliseconds for this request only
+    * `:max_retries` - GET retry budget for this request only
+  """
 
   import Bitwise
 
@@ -16,13 +27,14 @@ defmodule Mercadopago.HTTP do
           {:ok, %{status: non_neg_integer(), response: map() | list() | nil}}
           | {:error, term()}
 
-  @doc "GET request with optional query params and per-call opts (e.g. `access_token:`)."
+  @doc "GET request with optional query params and per-call opts."
   @spec get(Client.t(), String.t(), map() | nil, keyword()) :: response()
   def get(%Client{} = client, uri, params \\ nil, opts \\ []) do
     headers = build_headers(client, opts)
     url = Config.api_base_url() <> uri
-    base_opts = plug_opt(client)
-    do_get(url, headers, params, client.timeout, client.max_retries, 0, base_opts)
+    timeout = opts[:timeout] || client.timeout
+    max_retries = opts[:max_retries] || client.max_retries
+    do_get(url, headers, params, timeout, max_retries, 0, base_opts(client))
   end
 
   @doc "POST request. Omit `body` or pass `nil` to send no body."
@@ -30,7 +42,7 @@ defmodule Mercadopago.HTTP do
   def post(%Client{} = client, uri, body, opts \\ []) do
     headers = build_headers(client, opts)
     url = Config.api_base_url() <> uri
-    req_opts = plug_opt(client) ++ [headers: headers, receive_timeout: client.timeout]
+    req_opts = base_opts(client) ++ [headers: headers, receive_timeout: timeout(client, opts)]
     req_opts = if body, do: Keyword.put(req_opts, :json, body), else: req_opts
     execute(:post, url, req_opts)
   end
@@ -44,7 +56,7 @@ defmodule Mercadopago.HTTP do
     execute(
       :put,
       url,
-      plug_opt(client) ++ [headers: headers, json: body, receive_timeout: client.timeout]
+      base_opts(client) ++ [headers: headers, json: body, receive_timeout: timeout(client, opts)]
     )
   end
 
@@ -53,7 +65,12 @@ defmodule Mercadopago.HTTP do
   def delete(%Client{} = client, uri, opts \\ []) do
     headers = build_headers(client, opts)
     url = Config.api_base_url() <> uri
-    execute(:delete, url, plug_opt(client) ++ [headers: headers, receive_timeout: client.timeout])
+
+    execute(
+      :delete,
+      url,
+      base_opts(client) ++ [headers: headers, receive_timeout: timeout(client, opts)]
+    )
   end
 
   defp do_get(url, headers, params, timeout, max_retries, attempt, base_opts) do
@@ -71,8 +88,15 @@ defmodule Mercadopago.HTTP do
     end
   end
 
-  defp plug_opt(%Client{plug: nil}), do: []
-  defp plug_opt(%Client{plug: plug}), do: [plug: plug]
+  defp timeout(%Client{} = client, opts), do: opts[:timeout] || client.timeout
+
+  # Req's built-in retry is disabled: the Ruby SDK's retry policy (GET only,
+  # fixed 1s pause, specific statuses) is replicated in do_get/7.
+  defp base_opts(%Client{} = client) do
+    opts = [retry: false]
+    opts = if client.finch, do: [finch: client.finch] ++ opts, else: opts
+    if client.plug, do: [plug: client.plug] ++ opts, else: opts
+  end
 
   defp execute(method, url, req_opts) do
     case Req.request(Keyword.merge([method: method, url: url], req_opts)) do
@@ -107,7 +131,34 @@ defmodule Mercadopago.HTTP do
 
     base
     |> Map.merge(partner)
-    |> Map.merge(client.custom_headers || %{})
+    |> merge_custom_headers(client, opts)
+  end
+
+  # Custom headers replace generated ones case-insensitively, so callers can
+  # override e.g. "x-idempotency-key" regardless of the casing they use.
+  # Per-call custom headers win over the client's under the same rule.
+  defp merge_custom_headers(headers, %Client{} = client, opts) do
+    custom =
+      merge_case_insensitive(
+        stringify_names(client.custom_headers || %{}),
+        stringify_names(opts[:custom_headers] || %{})
+      )
+
+    merge_case_insensitive(headers, custom)
+  end
+
+  defp merge_case_insensitive(base, override) when map_size(override) == 0, do: base
+
+  defp merge_case_insensitive(base, override) do
+    override_names = MapSet.new(Map.keys(override), &String.downcase/1)
+
+    base
+    |> Map.reject(fn {name, _value} -> String.downcase(name) in override_names end)
+    |> Map.merge(override)
+  end
+
+  defp stringify_names(headers) do
+    Map.new(headers, fn {name, value} -> {to_string(name), value} end)
   end
 
   defp put_if(map, nil, _key, _value), do: map

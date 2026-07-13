@@ -4,6 +4,7 @@ defmodule Mercadopago.Client do
   defstruct [
     :access_token,
     :plug,
+    :finch,
     timeout: 60_000,
     max_retries: 3,
     custom_headers: %{},
@@ -15,6 +16,7 @@ defmodule Mercadopago.Client do
   @type t :: %__MODULE__{
           access_token: String.t(),
           plug: term() | nil,
+          finch: atom() | nil,
           timeout: non_neg_integer(),
           max_retries: non_neg_integer(),
           custom_headers: map(),

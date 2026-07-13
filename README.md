@@ -4,7 +4,7 @@
 [![Hex Docs](https://img.shields.io/badge/hex-docs-blue.svg)](https://hexdocs.pm/mercadopago_sdk_elixir)
 [![License](https://img.shields.io/hexpm/l/mercadopago_sdk_elixir.svg)](https://github.com/coelhorb/mercadopago_sdk_elixir/blob/main/LICENSE)
 
-Elixir client for the [MercadoPago REST API](https://www.mercadopago.com.br/developers/pt/docs), ported from the official Ruby SDK.
+Elixir client for the [MercadoPago REST API](https://www.mercadopago.com.br/developers/pt/docs), ported from the official Ruby SDK (feature parity with `mercadopago-sdk` 3.2.0).
 
 ## Installation
 
@@ -13,7 +13,7 @@ Add to `mix.exs`:
 ```elixir
 def deps do
   [
-    {:mercadopago_sdk_elixir, "~> 0.1.0"}
+    {:mercadopago_sdk_elixir, "~> 0.2.0"}
   ]
 end
 ```
@@ -37,10 +37,57 @@ client = Mercadopago.new("YOUR_ACCESS_TOKEN")
   Mercadopago.Payment.get(client, payment["id"])
 ```
 
-Per-call token override:
+### Checkout Pro orders
+
+`Mercadopago.Order.create_checkout_pro/3` wraps `Order.create/3` and applies
+the Checkout Pro defaults `type: "online"` and `processing_mode: "manual"`
+when omitted (raising `ArgumentError` if incompatible values are given):
+
+```elixir
+{:ok, %{status: 201, response: order}} =
+  Mercadopago.Order.create_checkout_pro(client, %{
+    external_reference: "order-0001",
+    total_amount: "100.00",
+    items: [
+      %{title: "Product", unit_price: "100.00", quantity: 1}
+    ]
+  })
+
+# order["type"] == "online", order["processing_mode"] == "manual"
+```
+
+### Per-call options
+
+Every resource call accepts options that override the client configuration
+for that single request:
 
 ```elixir
 Mercadopago.Payment.get(client, id, access_token: "OTHER_TOKEN")
+
+# Pin the idempotency key of one POST (case-insensitive override of the
+# generated x-idempotency-key header):
+Mercadopago.Order.create_checkout_pro(client, order_data,
+  custom_headers: %{"X-Idempotency-Key" => my_key}
+)
+
+Mercadopago.Payment.search(client, filters, timeout: 5_000, max_retries: 1)
+```
+
+Supported keys: `:access_token`, `:custom_headers`, `:timeout` (ms) and
+`:max_retries` (GET only).
+
+### Connection pooling
+
+By default requests go through Req's shared Finch pool. For high-throughput
+applications, start a dedicated [Finch](https://hex.pm/packages/finch) pool in
+your supervision tree and point the client at it:
+
+```elixir
+# In your application supervisor
+{Finch, name: MyApp.MercadopagoFinch, pools: %{default: [size: 25]}}
+
+# When building the client
+client = Mercadopago.new(token, finch: MyApp.MercadopagoFinch)
 ```
 
 ## Testing

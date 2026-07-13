@@ -7,9 +7,12 @@ defmodule Mercadopago do
       client = Mercadopago.new("YOUR_ACCESS_TOKEN")
       {:ok, %{status: 201, response: payment}} = Mercadopago.Payment.create(client, payment_data)
 
-  Per-call token override:
+  Every resource call accepts per-call options that override the client
+  configuration for that request only:
 
       Mercadopago.Payment.get(client, id, access_token: "OTHER_TOKEN")
+      Mercadopago.Payment.create(client, data, custom_headers: %{"x-idempotency-key" => key})
+      Mercadopago.Payment.search(client, filters, timeout: 5_000, max_retries: 1)
   """
 
   alias Mercadopago.Client
@@ -21,10 +24,13 @@ defmodule Mercadopago do
 
     * `:timeout` - HTTP timeout in milliseconds (default: 60_000)
     * `:max_retries` - max retries for GET on transient errors (default: 3)
-    * `:custom_headers` - extra headers merged into every request (default: %{})
+    * `:custom_headers` - extra headers merged into every request, overriding
+      generated headers case-insensitively (default: %{})
     * `:corporation_id` - MercadoPago x-corporation-id header
     * `:integrator_id` - MercadoPago x-integrator-id header
     * `:platform_id` - MercadoPago x-platform-id header
+    * `:finch` - name of a Finch pool started by the host application, for
+      dedicated connection pooling; nil uses Req's default pool
     * `:plug` - Req plug for testing (e.g. `{Req.Test, :my_stub}`); nil in production
   """
   @spec new(String.t(), keyword()) :: Client.t()
@@ -32,6 +38,7 @@ defmodule Mercadopago do
     %Client{
       access_token: access_token,
       plug: opts[:plug],
+      finch: opts[:finch],
       timeout: Keyword.get(opts, :timeout, 60_000),
       max_retries: Keyword.get(opts, :max_retries, 3),
       custom_headers: Keyword.get(opts, :custom_headers, %{}),
