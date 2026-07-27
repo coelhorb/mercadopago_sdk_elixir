@@ -6,7 +6,7 @@ defmodule Mercadopago.MixProject do
   def project do
     [
       app: :mercadopago_sdk_elixir,
-      version: "0.2.0",
+      version: "0.2.1",
       elixir: "~> 1.15",
       start_permanent: Mix.env() == :prod,
       elixirc_paths: elixirc_paths(Mix.env()),
@@ -45,13 +45,14 @@ defmodule Mercadopago.MixProject do
   end
 
   def cli do
-    [preferred_envs: [ci: :test]]
+    [preferred_envs: [ci: :test, "test.integration": :test]]
   end
 
   defp deps do
     [
       {:req, "~> 0.5"},
       {:jason, "~> 1.2"},
+      {:telemetry, "~> 1.0"},
       {:plug, "~> 1.0", only: :test},
       {:vibe_kit, "~> 0.1", only: [:dev, :test], runtime: false},
       {:ex_slop, "~> 0.4", only: [:dev, :test], runtime: false},
@@ -69,14 +70,17 @@ defmodule Mercadopago.MixProject do
   defp aliases do
     [
       ci: [
+        "format",
         "compile --warnings-as-errors",
         "format --check-formatted",
-        "test",
+        "test --exclude integration",
         "credo --strict",
         "dialyzer",
+        "cmd env MIX_ENV=dev mix docs --warnings-as-errors",
         "ex_dna --max-clones 0",
         "reach.check --arch --smells"
-      ]
+      ],
+      "test.integration": ["cmd bash scripts/test_integration.sh"]
     ]
   end
 end

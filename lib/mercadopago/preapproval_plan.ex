@@ -1,8 +1,6 @@
 defmodule Mercadopago.PreapprovalPlan do
   @moduledoc "Subscription plan template management."
 
-  @behaviour Mercadopago.Resource
-
   alias Mercadopago.{Client, HTTP}
 
   @doc "Searches preapproval plans matching `filters` (query-string parameters)."
@@ -12,9 +10,14 @@ defmodule Mercadopago.PreapprovalPlan do
   end
 
   @doc "Fetches a preapproval plan by id."
-  @spec get(Client.t(), String.t(), keyword()) :: HTTP.response()
+  @spec get(Client.t(), HTTP.id(), keyword()) :: HTTP.response()
   def get(%Client{} = client, preapproval_plan_id, opts \\ []) do
-    HTTP.get(client, "/preapproval_plan/#{preapproval_plan_id}", nil, opts)
+    HTTP.get(
+      client,
+      "/preapproval_plan/#{HTTP.encode_path_param(preapproval_plan_id)}",
+      nil,
+      opts
+    )
   end
 
   @doc "Creates a preapproval plan from `preapproval_plan_data`."
@@ -24,8 +27,13 @@ defmodule Mercadopago.PreapprovalPlan do
   end
 
   @doc "Updates a preapproval plan."
-  @spec update(Client.t(), String.t(), map(), keyword()) :: HTTP.response()
+  @spec update(Client.t(), HTTP.id(), map(), keyword()) :: HTTP.response()
   def update(%Client{} = client, preapproval_plan_id, preapproval_plan_data, opts \\ []) do
-    HTTP.put(client, "/preapproval_plan/#{preapproval_plan_id}", preapproval_plan_data, opts)
+    HTTP.put(
+      client,
+      "/preapproval_plan/#{HTTP.encode_path_param(preapproval_plan_id)}",
+      preapproval_plan_data,
+      opts
+    )
   end
 end

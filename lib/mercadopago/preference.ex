@@ -4,9 +4,9 @@ defmodule Mercadopago.Preference do
   alias Mercadopago.{Client, HTTP}
 
   @doc "Fetches a preference by id."
-  @spec get(Client.t(), String.t(), keyword()) :: HTTP.response()
+  @spec get(Client.t(), HTTP.id(), keyword()) :: HTTP.response()
   def get(%Client{} = client, preference_id, opts \\ []) do
-    HTTP.get(client, "/checkout/preferences/#{preference_id}", nil, opts)
+    HTTP.get(client, "/checkout/preferences/#{HTTP.encode_path_param(preference_id)}", nil, opts)
   end
 
   @doc "Creates a preference from `preference_data`."
@@ -16,8 +16,13 @@ defmodule Mercadopago.Preference do
   end
 
   @doc "Updates a preference."
-  @spec update(Client.t(), String.t(), map(), keyword()) :: HTTP.response()
+  @spec update(Client.t(), HTTP.id(), map(), keyword()) :: HTTP.response()
   def update(%Client{} = client, preference_id, preference_data, opts \\ []) do
-    HTTP.put(client, "/checkout/preferences/#{preference_id}", preference_data, opts)
+    HTTP.put(
+      client,
+      "/checkout/preferences/#{HTTP.encode_path_param(preference_id)}",
+      preference_data,
+      opts
+    )
   end
 end

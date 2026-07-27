@@ -10,9 +10,9 @@ defmodule Mercadopago.Customer do
   end
 
   @doc "Fetches a customer by id."
-  @spec get(Client.t(), String.t(), keyword()) :: HTTP.response()
+  @spec get(Client.t(), HTTP.id(), keyword()) :: HTTP.response()
   def get(%Client{} = client, customer_id, opts \\ []) do
-    HTTP.get(client, "/v1/customers/#{customer_id}", nil, opts)
+    HTTP.get(client, "/v1/customers/#{HTTP.encode_path_param(customer_id)}", nil, opts)
   end
 
   @doc "Creates a customer from `customer_data`."
@@ -22,14 +22,14 @@ defmodule Mercadopago.Customer do
   end
 
   @doc "Updates a customer."
-  @spec update(Client.t(), String.t(), map(), keyword()) :: HTTP.response()
+  @spec update(Client.t(), HTTP.id(), map(), keyword()) :: HTTP.response()
   def update(%Client{} = client, customer_id, customer_data, opts \\ []) do
-    HTTP.put(client, "/v1/customers/#{customer_id}", customer_data, opts)
+    HTTP.put(client, "/v1/customers/#{HTTP.encode_path_param(customer_id)}", customer_data, opts)
   end
 
   @doc "Deletes a customer by id."
-  @spec delete(Client.t(), String.t(), keyword()) :: HTTP.response()
+  @spec delete(Client.t(), HTTP.id(), keyword()) :: HTTP.response()
   def delete(%Client{} = client, customer_id, opts \\ []) do
-    HTTP.delete(client, "/v1/customers/#{customer_id}", opts)
+    HTTP.delete(client, "/v1/customers/#{HTTP.encode_path_param(customer_id)}", opts)
   end
 end

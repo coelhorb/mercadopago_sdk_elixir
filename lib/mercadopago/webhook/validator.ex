@@ -54,6 +54,7 @@ defmodule Mercadopago.Webhook.Validator do
 
   @default_versions ["v1"]
   @version_regex ~r/\Av\d+\z/
+  @digits_regex ~r/\A\d+\z/
 
   @doc """
   Validates the signature of a MercadoPago webhook notification.
@@ -146,10 +147,17 @@ defmodule Mercadopago.Webhook.Validator do
 
   defp validate_timestamp(ts, hashes, x_req) do
     cond do
-      is_nil(ts) and map_size(hashes) == 0 -> {:error, error(:malformed_signature_header, x_req)}
-      is_nil(ts) -> {:error, error(:missing_timestamp, x_req)}
-      not Regex.match?(~r/\A\d+\z/, ts) -> {:error, error(:malformed_signature_header, x_req, ts)}
-      true -> :ok
+      is_nil(ts) and map_size(hashes) == 0 ->
+        {:error, error(:malformed_signature_header, x_req)}
+
+      is_nil(ts) ->
+        {:error, error(:missing_timestamp, x_req)}
+
+      not Regex.match?(@digits_regex, ts) ->
+        {:error, error(:malformed_signature_header, x_req, ts)}
+
+      true ->
+        :ok
     end
   end
 
@@ -164,12 +172,8 @@ defmodule Mercadopago.Webhook.Validator do
     Enum.reduce(String.split(header, ","), {nil, %{}}, fn part, {ts, hashes} ->
       case String.split(part, "=", parts: 2) do
         [key, value] ->
-          parse_signature_part(
-            String.trim(key) |> String.downcase(),
-            String.trim(value),
-            ts,
-            hashes
-          )
+          key = key |> String.trim() |> String.downcase()
+          parse_signature_part(key, String.trim(value), ts, hashes)
 
         _ ->
           {ts, hashes}
@@ -187,8 +191,10 @@ defmodule Mercadopago.Webhook.Validator do
   end
 
   defp verify_signature(data_id, x_req, ts, secret, received_hash) do
-    manifest = build_manifest(data_id, x_req, ts)
-    computed = :crypto.mac(:hmac, :sha256, secret, manifest) |> Base.encode16(case: :lower)
+    computed =
+      :hmac
+      |> :crypto.mac(:sha256, secret, build_manifest(data_id, x_req, ts))
+      |> Base.encode16(case: :lower)
 
     if constant_time_equal?(computed, received_hash) do
       :ok
@@ -197,13 +203,16 @@ defmodule Mercadopago.Webhook.Validator do
     end
   end
 
+  # `:crypto.mac/4` takes iodata, so the parts never need to be flattened.
+  # Absent fields are omitted from the manifest entirely.
   defp build_manifest(data_id, request_id, timestamp) do
-    parts = []
-    parts = if data_id, do: ["id:#{data_id}" | parts], else: parts
-    parts = if request_id, do: ["request-id:#{request_id}" | parts], else: parts
-    parts = ["ts:#{timestamp}" | parts]
-
-    Enum.reverse(parts) |> Enum.flat_map(&[&1, ";"]) |> IO.iodata_to_binary()
+    [
+      if(data_id, do: ["id:", data_id, ?;], else: []),
+      if(request_id, do: ["request-id:", request_id, ?;], else: []),
+      "ts:",
+      timestamp,
+      ?;
+    ]
   end
 
   defp check_tolerance(_ts, _x_req, nil, _now_fn), do: :ok

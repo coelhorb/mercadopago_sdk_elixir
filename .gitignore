@@ -13,6 +13,9 @@
 # Temporary files, for example, from tests.
 /tmp/
 
+# Local credentials for integration tests.
+/.env.integration
+
 # If the VM crashes, it generates a dump, let's ignore it too.
 erl_crash.dump
 
@@ -25,4 +28,3 @@ mercadopago_sdk_elixir-*.tar
 # Language-server workspace caches (machine-local).
 /.expert/
 /.elixir_ls/
-

@@ -1,8 +1,6 @@
 defmodule Mercadopago.MerchantOrder do
   @moduledoc "Merchant orders that group multiple payments."
 
-  @behaviour Mercadopago.Resource
-
   alias Mercadopago.{Client, HTTP}
 
   @doc "Searches merchant orders matching `filters` (query-string parameters)."
@@ -12,9 +10,9 @@ defmodule Mercadopago.MerchantOrder do
   end
 
   @doc "Fetches a merchant order by id."
-  @spec get(Client.t(), String.t(), keyword()) :: HTTP.response()
+  @spec get(Client.t(), HTTP.id(), keyword()) :: HTTP.response()
   def get(%Client{} = client, merchant_order_id, opts \\ []) do
-    HTTP.get(client, "/merchant_orders/#{merchant_order_id}", nil, opts)
+    HTTP.get(client, "/merchant_orders/#{HTTP.encode_path_param(merchant_order_id)}", nil, opts)
   end
 
   @doc "Creates a merchant order from `merchant_order_data`."
@@ -24,8 +22,13 @@ defmodule Mercadopago.MerchantOrder do
   end
 
   @doc "Updates a merchant order."
-  @spec update(Client.t(), String.t(), map(), keyword()) :: HTTP.response()
+  @spec update(Client.t(), HTTP.id(), map(), keyword()) :: HTTP.response()
   def update(%Client{} = client, merchant_order_id, merchant_order_data, opts \\ []) do
-    HTTP.put(client, "/merchant_orders/#{merchant_order_id}", merchant_order_data, opts)
+    HTTP.put(
+      client,
+      "/merchant_orders/#{HTTP.encode_path_param(merchant_order_id)}",
+      merchant_order_data,
+      opts
+    )
   end
 end

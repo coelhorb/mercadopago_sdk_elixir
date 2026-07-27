@@ -1,8 +1,6 @@
 defmodule Mercadopago.Preapproval do
   @moduledoc "Recurring subscription management."
 
-  @behaviour Mercadopago.Resource
-
   alias Mercadopago.{Client, HTTP}
 
   @doc "Searches preapprovals matching `filters` (query-string parameters)."
@@ -12,9 +10,9 @@ defmodule Mercadopago.Preapproval do
   end
 
   @doc "Fetches a preapproval by id."
-  @spec get(Client.t(), String.t(), keyword()) :: HTTP.response()
+  @spec get(Client.t(), HTTP.id(), keyword()) :: HTTP.response()
   def get(%Client{} = client, preapproval_id, opts \\ []) do
-    HTTP.get(client, "/preapproval/#{preapproval_id}", nil, opts)
+    HTTP.get(client, "/preapproval/#{HTTP.encode_path_param(preapproval_id)}", nil, opts)
   end
 
   @doc "Creates a preapproval from `preapproval_data`."
@@ -24,8 +22,13 @@ defmodule Mercadopago.Preapproval do
   end
 
   @doc "Updates a preapproval."
-  @spec update(Client.t(), String.t(), map(), keyword()) :: HTTP.response()
+  @spec update(Client.t(), HTTP.id(), map(), keyword()) :: HTTP.response()
   def update(%Client{} = client, preapproval_id, preapproval_data, opts \\ []) do
-    HTTP.put(client, "/preapproval/#{preapproval_id}", preapproval_data, opts)
+    HTTP.put(
+      client,
+      "/preapproval/#{HTTP.encode_path_param(preapproval_id)}",
+      preapproval_data,
+      opts
+    )
   end
 end

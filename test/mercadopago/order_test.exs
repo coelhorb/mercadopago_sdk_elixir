@@ -80,6 +80,14 @@ defmodule Mercadopago.OrderTest do
         Mercadopago.Order.create_checkout_pro(client, %{"processing_mode" => "automatic"})
       end
     end
+
+    test "raises ArgumentError instead of forwarding an explicit nil" do
+      client = new(:order_cho_pro_nil)
+
+      assert_raise ArgumentError, "Param type must be online", fn ->
+        Mercadopago.Order.create_checkout_pro(client, %{type: nil})
+      end
+    end
   end
 
   describe "create/3" do

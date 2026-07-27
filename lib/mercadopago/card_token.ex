@@ -4,9 +4,9 @@ defmodule Mercadopago.CardToken do
   alias Mercadopago.{Client, HTTP}
 
   @doc "Fetches a card token by id."
-  @spec get(Client.t(), String.t(), keyword()) :: HTTP.response()
+  @spec get(Client.t(), HTTP.id(), keyword()) :: HTTP.response()
   def get(%Client{} = client, card_token_id, opts \\ []) do
-    HTTP.get(client, "/v1/card_tokens/#{card_token_id}", nil, opts)
+    HTTP.get(client, "/v1/card_tokens/#{HTTP.encode_path_param(card_token_id)}", nil, opts)
   end
 
   @doc "Creates a card token from `card_token_data`."

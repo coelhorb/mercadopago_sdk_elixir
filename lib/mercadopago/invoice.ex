@@ -4,9 +4,9 @@ defmodule Mercadopago.Invoice do
   alias Mercadopago.{Client, HTTP}
 
   @doc "Fetches an authorized-payment invoice by id."
-  @spec get(Client.t(), String.t(), keyword()) :: HTTP.response()
+  @spec get(Client.t(), HTTP.id(), keyword()) :: HTTP.response()
   def get(%Client{} = client, invoice_id, opts \\ []) do
-    HTTP.get(client, "/authorized_payments/#{invoice_id}", nil, opts)
+    HTTP.get(client, "/authorized_payments/#{HTTP.encode_path_param(invoice_id)}", nil, opts)
   end
 
   @doc "Searches invoices matching `filters` (query-string parameters)."

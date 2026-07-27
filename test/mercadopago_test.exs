@@ -23,4 +23,14 @@ defmodule MercadopagoTest do
       assert_raise FunctionClauseError, fn -> apply(Mercadopago, :new, [123]) end
     end
   end
+
+  describe "version reporting" do
+    test "Config.version/0 tracks the version declared in mix.exs" do
+      version = Mix.Project.config()[:version]
+
+      assert Mercadopago.Config.version() == version
+      assert Mercadopago.Config.user_agent() =~ version
+      assert Mercadopago.Config.tracking_id() =~ "type:SDK#{version}"
+    end
+  end
 end

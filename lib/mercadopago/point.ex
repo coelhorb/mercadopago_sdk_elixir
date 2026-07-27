@@ -10,28 +10,33 @@ defmodule Mercadopago.Point do
   end
 
   @doc "Creates a payment intent on the given Point device."
-  @spec create(Client.t(), String.t(), map(), keyword()) :: HTTP.response()
+  @spec create(Client.t(), HTTP.id(), map(), keyword()) :: HTTP.response()
   def create(%Client{} = client, device_id, payment_intent_data, opts \\ []) do
     HTTP.post(
       client,
-      "/point/integration-api/devices/#{device_id}/payment-intents",
+      "/point/integration-api/devices/#{HTTP.encode_path_param(device_id)}/payment-intents",
       payment_intent_data,
       opts
     )
   end
 
   @doc "Fetches a payment intent by id."
-  @spec get(Client.t(), String.t(), keyword()) :: HTTP.response()
+  @spec get(Client.t(), HTTP.id(), keyword()) :: HTTP.response()
   def get(%Client{} = client, payment_intent_id, opts \\ []) do
-    HTTP.get(client, "/point/integration-api/payment-intents/#{payment_intent_id}", nil, opts)
+    HTTP.get(
+      client,
+      "/point/integration-api/payment-intents/#{HTTP.encode_path_param(payment_intent_id)}",
+      nil,
+      opts
+    )
   end
 
   @doc "Cancels a payment intent on the given device. Uses DELETE, mirroring the Ruby SDK."
-  @spec cancel(Client.t(), String.t(), String.t(), keyword()) :: HTTP.response()
+  @spec cancel(Client.t(), HTTP.id(), HTTP.id(), keyword()) :: HTTP.response()
   def cancel(%Client{} = client, device_id, payment_intent_id, opts \\ []) do
     HTTP.delete(
       client,
-      "/point/integration-api/devices/#{device_id}/payment-intents/#{payment_intent_id}",
+      "/point/integration-api/devices/#{HTTP.encode_path_param(device_id)}/payment-intents/#{HTTP.encode_path_param(payment_intent_id)}",
       opts
     )
   end

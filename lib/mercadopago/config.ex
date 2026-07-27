@@ -1,7 +1,8 @@
 defmodule Mercadopago.Config do
   @moduledoc "SDK-wide constants: API URLs, version, and tracking identifiers."
 
-  @version "0.2.0"
+  # Single source of truth: the version declared in mix.exs, read at compile time.
+  @version Mix.Project.config()[:version]
   @api_base_url "https://api.mercadopago.com"
   @auth_base_url "https://auth.mercadopago.com/authorization"
   @product_id "bc32a7vtrpp001u8nhjg"

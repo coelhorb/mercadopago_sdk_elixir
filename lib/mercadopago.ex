@@ -23,7 +23,12 @@ defmodule Mercadopago do
   ## Options
 
     * `:timeout` - HTTP timeout in milliseconds (default: 60_000)
-    * `:max_retries` - max retries for GET on transient errors (default: 3)
+    * `:max_retries` - total GET attempts on transient errors (default: 3, i.e.
+      the first attempt plus two retries)
+    * `:retry_delay` - base backoff in milliseconds, doubled on each retry and
+      jittered (default: 1_000)
+    * `:max_retry_delay` - ceiling for the backoff, also capping a `Retry-After`
+      sent by the server, in milliseconds (default: 8_000)
     * `:custom_headers` - extra headers merged into every request, overriding
       generated headers case-insensitively (default: %{})
     * `:corporation_id` - MercadoPago x-corporation-id header
@@ -41,6 +46,8 @@ defmodule Mercadopago do
       finch: opts[:finch],
       timeout: Keyword.get(opts, :timeout, 60_000),
       max_retries: Keyword.get(opts, :max_retries, 3),
+      retry_delay: Keyword.get(opts, :retry_delay, 1_000),
+      max_retry_delay: Keyword.get(opts, :max_retry_delay, 8_000),
       custom_headers: Keyword.get(opts, :custom_headers, %{}),
       corporation_id: opts[:corporation_id],
       integrator_id: opts[:integrator_id],
