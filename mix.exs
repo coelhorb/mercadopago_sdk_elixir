@@ -28,14 +28,14 @@ defmodule Mercadopago.MixProject do
         "GitHub" => @source_url,
         "MercadoPago Developers" => "https://www.mercadopago.com.br/developers"
       },
-      files: ~w(lib mix.exs README.md LICENSE)
+      files: ~w(lib examples mix.exs README.md CHANGELOG.md DIVERGENCES.md LICENSE)
     ]
   end
 
   defp docs do
     [
       main: "readme",
-      extras: ["README.md"],
+      extras: ["README.md", "CHANGELOG.md", "DIVERGENCES.md"],
       source_url: @source_url
     ]
   end

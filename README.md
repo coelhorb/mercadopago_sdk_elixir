@@ -6,6 +6,40 @@
 
 Elixir client for the [MercadoPago REST API](https://www.mercadopago.com.br/developers/pt/docs), ported from the official Ruby SDK (feature parity with `mercadopago-sdk` 3.2.1).
 
+## Validated against MercadoPago's MCP server
+
+Every public method in this SDK was cross-checked against MercadoPago's live API
+documentation through their official MCP server:
+
+```bash
+claude mcp add --transport http mercadopago https://mcp.mercadopago.com/mcp
+```
+
+Of the 62 distinct verb/route pairs the SDK exposes, 41 were confirmed against
+the current documentation, 8 target APIs MercadoPago now classifies as legacy,
+and the remainder are either undocumented in the public reference or corroborated
+only indirectly. One contradicted the docs outright and was fixed.
+
+Every finding was then re-verified against the source before being acted on —
+several did not survive that check, including a claim that Checkout Pro was
+missing (it is implemented as `Mercadopago.Preference`). To be clear about what
+this means: the MCP server is a documentation source, not a conformance suite. It
+tells you what the API says it does, not that this client is certified.
+
+## What changed in 0.2.1
+
+| Change | Why it matters |
+| --- | --- |
+| Webhook `data.id` is lowercased before the HMAC | **Orders webhooks were being rejected outright.** Numeric payment ids were unaffected, so this was invisible unless you used the Orders API |
+| `Order.create_online/3` replaces `create_checkout_pro/3` | The old name pointed at the wrong integration; it still works, deprecated |
+| `HTTP.patch/4` and multipart bodies | Unblocks partial updates and document uploads |
+| OAuth PKCE + tokenless clients | The authorization-code flow no longer needs a fake empty token |
+| `HTTP.unwrap/1` and `Mercadopago.Error` | Opt-in `{:ok, body}` / `{:error, exception}` style |
+
+No public function was removed or changed arity. Full detail in
+[CHANGELOG.md](CHANGELOG.md); every intentional departure from the reference Ruby
+SDK is recorded in [DIVERGENCES.md](DIVERGENCES.md).
+
 ## Installation
 
 Add to `mix.exs`:
@@ -37,15 +71,37 @@ client = Mercadopago.new("YOUR_ACCESS_TOKEN")
   Mercadopago.Payment.get(client, payment["id"])
 ```
 
-### Checkout Pro orders
+### Checkout Pro
 
-`Mercadopago.Order.create_checkout_pro/3` wraps `Order.create/3` and applies
-the Checkout Pro defaults `type: "online"` and `processing_mode: "manual"`
-when omitted (raising `ArgumentError` if incompatible values are given):
+Checkout Pro is the hosted flow: you create a payment preference and redirect the
+buyer to the `init_point` MercadoPago returns.
+
+```elixir
+{:ok, %{status: 201, response: preference}} =
+  Mercadopago.Preference.create(client, %{
+    external_reference: "order-0001",
+    items: [
+      %{title: "Product", unit_price: 100.0, quantity: 1, currency_id: "BRL"}
+    ],
+    back_urls: %{
+      success: "https://shop.example/success",
+      failure: "https://shop.example/failure"
+    }
+  })
+
+redirect_to = preference["init_point"]
+```
+
+### Online orders (Checkout API via Orders)
+
+A different integration from Checkout Pro, despite the similar shape.
+`Mercadopago.Order.create_online/3` wraps `Order.create/3` and applies the
+two-step defaults `type: "online"` and `processing_mode: "manual"` when omitted,
+raising `ArgumentError` if incompatible values are given:
 
 ```elixir
 {:ok, %{status: 201, response: order}} =
-  Mercadopago.Order.create_checkout_pro(client, %{
+  Mercadopago.Order.create_online(client, %{
     external_reference: "order-0001",
     total_amount: "100.00",
     items: [
@@ -54,7 +110,14 @@ when omitted (raising `ArgumentError` if incompatible values are given):
   })
 
 # order["type"] == "online", order["processing_mode"] == "manual"
+
+# Settle it afterwards:
+{:ok, %{status: 200}} = Mercadopago.Order.process(client, order["id"])
 ```
+
+> `Order.create_checkout_pro/3` is the deprecated former name of
+> `create_online/3`. It still works, but it named the wrong integration — use
+> `Mercadopago.Preference` for Checkout Pro.
 
 ### Industry-specific fields
 
@@ -66,7 +129,7 @@ travel descriptors with passenger and route data.
 Complete examples:
 
 - [Payment with industry fields](examples/payment/create_with_industry_fields.exs)
-- [Checkout Pro Order with industry fields](examples/order/create_checkout_pro.exs)
+- [Online Order with industry fields](examples/order/create_online.exs)
 - [Preference with industry fields](examples/preference/create_with_industry_fields.exs)
 
 ### Per-call options
@@ -79,7 +142,7 @@ Mercadopago.Payment.get(client, id, access_token: "OTHER_TOKEN")
 
 # Pin the idempotency key of one POST (case-insensitive override of the
 # generated x-idempotency-key header):
-Mercadopago.Order.create_checkout_pro(client, order_data,
+Mercadopago.Order.create_online(client, order_data,
   custom_headers: %{"X-Idempotency-Key" => my_key}
 )
 
@@ -88,6 +151,70 @@ Mercadopago.Payment.search(client, filters, timeout: 5_000, max_retries: 1)
 
 Supported keys: `:access_token`, `:custom_headers`, `:timeout` (ms), and — for
 GET only — `:max_retries`, `:retry_delay` and `:max_retry_delay`.
+
+### Error handling
+
+Every completed request returns `{:ok, %{status: _, response: _}}` — a `404`
+included. `{:error, reason}` is reserved for transport failures. Pipe through
+`Mercadopago.HTTP.unwrap/1` when you would rather branch on `{:ok, _}` /
+`{:error, _}` than on the status code:
+
+```elixir
+case client |> Mercadopago.Payment.get(id) |> Mercadopago.HTTP.unwrap() do
+  {:ok, payment} -> payment
+  {:error, %Mercadopago.Error{status: 404}} -> nil
+  {:error, %Mercadopago.Error{} = e} -> Logger.error(Exception.message(e))
+end
+```
+
+`unwrap/1` is a pure function over an already-returned response, so it changes
+nothing about how requests are made. `Mercadopago.Error` carries `:status`,
+the untouched `:response` body, and MercadoPago's `:cause` list when present.
+
+### Uploads and partial updates
+
+`Mercadopago.HTTP.patch/4` covers endpoints that take a partial update. For
+`multipart/form-data`, pass `{:multipart, parts}` as the body — part content may
+be a stream, so large files are not read into memory:
+
+```elixir
+Mercadopago.HTTP.post(client, "/v1/chargebacks/#{id}/documentation",
+  {:multipart, [
+    {:kind, "invoice"},
+    {:file, {File.stream!("proof.pdf", 2048),
+             filename: "proof.pdf", content_type: "application/pdf"}}
+  ]}
+)
+```
+
+### OAuth (marketplaces)
+
+The token endpoint needs no prior credentials, so bootstrap it with a tokenless
+client. PKCE is optional on MercadoPago but costs nothing to include:
+
+```elixir
+verifier = Mercadopago.OAuth.generate_code_verifier()
+
+url =
+  Mercadopago.OAuth.get_authorization_url(app_id, redirect_uri, state,
+    code_challenge: Mercadopago.OAuth.code_challenge(verifier)
+  )
+
+# ...redirect the seller to `url`, then on the callback:
+
+{:ok, %{status: 200, response: %{"access_token" => token}}} =
+  Mercadopago.OAuth.create(Mercadopago.new(nil), %{
+    client_id: app_id,
+    client_secret: app_secret,
+    code: code,
+    redirect_uri: redirect_uri,
+    code_verifier: verifier
+  })
+```
+
+Store `verifier` in the session alongside `state`; both must survive the
+redirect. `grant_type` defaults to `authorization_code` for `create/3` and
+`refresh_token` for `refresh/3`.
 
 ### Retry policy
 
@@ -267,3 +394,12 @@ Mercadopago.Webhook.Validator.validate(x_sig, x_req, data_id, secret,
 Raising variant (`validate!/5`) is also available — raises
 `Mercadopago.Webhook.Validator.InvalidSignatureError` on failure instead of
 returning `{:error, _}`.
+
+Pass `data_id` exactly as received. MercadoPago builds the signature manifest
+from the **lowercased** id, and the validator handles that internally — the
+Orders API sends ids like `ORD01JQ4S4KY8HWQ6NA5PXB65B3D3` that only verify once
+downcased. Use the original value when fetching the resource.
+
+Legacy QR Code notifications are not signed and will always fail validation. QR
+payments delivered through the Orders API *are* signed and should be validated
+like any other event.

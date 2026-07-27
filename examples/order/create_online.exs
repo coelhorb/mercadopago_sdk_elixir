@@ -64,8 +64,10 @@ order_data = %{
   ]
 }
 
+# Checkout API via Orders — not Checkout Pro. For the hosted Checkout Pro flow,
+# create a preference instead (see examples/preference/).
 {:ok, %{status: status, response: order}} =
-  Mercadopago.Order.create_checkout_pro(
+  Mercadopago.Order.create_online(
     client,
     order_data,
     custom_headers: %{"X-Idempotency-Key" => System.fetch_env!("MERCADOPAGO_IDEMPOTENCY_KEY")}
