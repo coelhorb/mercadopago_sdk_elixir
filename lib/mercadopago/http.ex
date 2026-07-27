@@ -65,6 +65,48 @@ defmodule Mercadopago.HTTP do
           {:ok, %{status: non_neg_integer(), response: map() | list() | binary() | nil}}
           | {:error, term()}
 
+  @typedoc """
+  A `multipart/form-data` body. Each part is `{name, value}`, where `name` is an
+  atom (Req's requirement) and `value` is either a plain binary field or
+  `{content, filename: name, content_type: type}` for a file part. `content` may
+  be a binary or a stream, so large uploads need not be read into memory.
+
+  Required by endpoints such as chargeback documentation upload:
+
+      {:multipart, [
+        {:kind, "invoice"},
+        {:file, {File.stream!("proof.pdf", 2048), filename: "proof.pdf",
+                 content_type: "application/pdf"}}
+      ]}
+  """
+  @type multipart_body :: {:multipart, [{atom(), term()}]}
+
+  @typedoc "Request body: a JSON-encodable map, a multipart body, or none."
+  @type body :: map() | multipart_body() | nil
+
+  @doc """
+  Converts a response into idiomatic `{:ok, body}` / `{:error, exception}`.
+
+  A completed request with a status of 400 or above becomes
+  `{:error, %Mercadopago.Error{}}`; a success is unwrapped to its body alone.
+  Transport failures pass through unchanged, since they are already `{:error, _}`.
+
+      client
+      |> Mercadopago.Payment.get(payment_id)
+      |> Mercadopago.HTTP.unwrap()
+
+  This is a pure function over an already-returned response, so it is opt-in: the
+  resource functions themselves keep returning `{:ok, %{status: _, response: _}}`.
+  Reach for it when the status code carries no information you act on.
+  """
+  @spec unwrap(response()) :: {:ok, map() | list() | binary() | nil} | {:error, term()}
+  def unwrap({:ok, %{status: status, response: body}}) when status >= 400 do
+    {:error, Mercadopago.Error.new(status, body)}
+  end
+
+  def unwrap({:ok, %{response: body}}), do: {:ok, body}
+  def unwrap({:error, _reason} = error), do: error
+
   @doc false
   @spec encode_path_param(id()) :: String.t()
   def encode_path_param(value) when is_integer(value), do: Integer.to_string(value)
@@ -89,18 +131,27 @@ defmodule Mercadopago.HTTP do
     do_get(Config.api_base_url() <> uri, uri, req_opts, config, 0)
   end
 
-  @doc "POST request. Omit `body` or pass `nil` to send no body."
-  @spec post(Client.t(), String.t(), map() | nil, keyword()) :: response()
-  def post(%Client{} = client, uri, body, opts \\ []) do
-    base = base_opts(client, opts)
+  @doc """
+  POST request. Omit `body` or pass `nil` to send no body.
 
-    request(:post, uri, if(body, do: [json: body] ++ base, else: base))
+  Pass `{:multipart, parts}` as the body to upload files as `multipart/form-data`
+  instead of JSON — see `t:multipart_body/0`.
+  """
+  @spec post(Client.t(), String.t(), body(), keyword()) :: response()
+  def post(%Client{} = client, uri, body, opts \\ []) do
+    request(:post, uri, encode_body(body, base_opts(client, opts)))
   end
 
   @doc "PUT request."
-  @spec put(Client.t(), String.t(), map() | nil, keyword()) :: response()
+  @spec put(Client.t(), String.t(), body(), keyword()) :: response()
   def put(%Client{} = client, uri, body, opts \\ []) do
-    request(:put, uri, [json: body] ++ base_opts(client, opts))
+    request(:put, uri, encode_body(body, base_opts(client, opts)))
+  end
+
+  @doc "PATCH request, for endpoints that accept a partial update."
+  @spec patch(Client.t(), String.t(), body(), keyword()) :: response()
+  def patch(%Client{} = client, uri, body, opts \\ []) do
+    request(:patch, uri, encode_body(body, base_opts(client, opts)))
   end
 
   @doc "DELETE request."
@@ -108,6 +159,12 @@ defmodule Mercadopago.HTTP do
   def delete(%Client{} = client, uri, opts \\ []) do
     request(:delete, uri, base_opts(client, opts))
   end
+
+  # Req sets the Content-Type (and the multipart boundary) from whichever of these
+  # options is present, so the body shape alone selects the encoding.
+  defp encode_body(nil, req_opts), do: req_opts
+  defp encode_body({:multipart, parts}, req_opts), do: [form_multipart: parts] ++ req_opts
+  defp encode_body(body, req_opts), do: [json: body] ++ req_opts
 
   defp do_get(url, path, req_opts, config, attempt) do
     result = execute(:get, url, path, req_opts, attempt)
@@ -204,7 +261,6 @@ defmodule Mercadopago.HTTP do
     token = opts[:access_token] || client.access_token
 
     base = %{
-      "Authorization" => "Bearer #{token}",
       "x-product-id" => Config.product_id(),
       "x-tracking-id" => Config.tracking_id(),
       "x-idempotency-key" => generate_idempotency_key(),
@@ -212,14 +268,17 @@ defmodule Mercadopago.HTTP do
       "Accept" => "application/json"
     }
 
-    partner =
+    # Authorization is omitted entirely when there is no token, so that the OAuth
+    # bootstrap does not send a bare "Bearer " that the API rejects as malformed.
+    optional =
       %{}
+      |> put_if(blank_to_nil(token), "Authorization", "Bearer #{token}")
       |> put_if(client.corporation_id, "x-corporation-id", client.corporation_id)
       |> put_if(client.integrator_id, "x-integrator-id", client.integrator_id)
       |> put_if(client.platform_id, "x-platform-id", client.platform_id)
 
     base
-    |> Map.merge(partner)
+    |> Map.merge(optional)
     |> merge_custom_headers(client, opts)
   end
 
@@ -252,6 +311,10 @@ defmodule Mercadopago.HTTP do
 
   defp put_if(map, nil, _key, _value), do: map
   defp put_if(map, _truthy, key, value), do: Map.put(map, key, value)
+
+  defp blank_to_nil(nil), do: nil
+  defp blank_to_nil(""), do: nil
+  defp blank_to_nil(token), do: token
 
   # Canonical UUID v4, matching the Ruby SDK's SecureRandom.uuid.
   defp generate_idempotency_key do

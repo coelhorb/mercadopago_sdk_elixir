@@ -75,6 +75,40 @@ defmodule Mercadopago.Webhook.ValidatorTest do
                )
     end
 
+    test "accepts an uppercase Orders data_id against a lowercased manifest" do
+      # MercadoPago's documented example: the notification carries
+      # ORD01JQ4S4KY8HWQ6NA5PXB65B3D3 but signs ord01jq4s4ky8hwq6na5pxb65b3d3.
+      sent_id = "ORD01JQ4S4KY8HWQ6NA5PXB65B3D3"
+      signed_manifest = valid_manifest(String.downcase(sent_id), @request_id, @ts)
+      x_sig = header(@ts, sign(signed_manifest))
+
+      assert {:ok, @ts} = Validator.validate(x_sig, @request_id, sent_id, @secret)
+    end
+
+    test "accepts a mixed-case data_id against a lowercased manifest" do
+      sent_id = "OrD01jQ4s4Ky8H"
+      signed_manifest = valid_manifest(String.downcase(sent_id), @request_id, @ts)
+      x_sig = header(@ts, sign(signed_manifest))
+
+      assert {:ok, @ts} = Validator.validate(x_sig, @request_id, sent_id, @secret)
+    end
+
+    test "numeric data_id signing is unchanged by the lowercasing rule" do
+      # Regression guard: digits have no case, so the manifest must be
+      # byte-identical to what it was before lowercasing was introduced.
+      x_sig = header(@ts, sign("id:123;request-id:#{@request_id};ts:#{@ts};"))
+
+      assert {:ok, @ts} = Validator.validate(x_sig, @request_id, "123", @secret)
+    end
+
+    test "rejects a signature computed over a non-lowercased data_id" do
+      sent_id = "ORD01JQ4S4KY8HWQ6NA5PXB65B3D3"
+      x_sig = header(@ts, sign(valid_manifest(sent_id, @request_id, @ts)))
+
+      assert {:error, %InvalidSignatureError{reason: :signature_mismatch}} =
+               Validator.validate(x_sig, @request_id, sent_id, @secret)
+    end
+
     test "timestamp tolerance passes when drift is within limit" do
       now_ms = String.to_integer(@ts) + 100_000
       now_fn = fn -> now_ms end

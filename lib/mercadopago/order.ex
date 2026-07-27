@@ -10,21 +10,38 @@ defmodule Mercadopago.Order do
   end
 
   @doc """
-  Creates a Checkout Pro order.
+  Creates an online order processed in stages (Checkout API via Orders).
 
-  Convenience wrapper over `create/3` that applies the Checkout Pro Orders API
-  defaults: `type` `"online"` and `processing_mode` `"manual"` when omitted.
-  If those fields are provided (atom or string key), they must already match
-  the Checkout Pro flow; otherwise an `ArgumentError` is raised.
+  Convenience wrapper over `create/3` that applies the two-step defaults:
+  `type` `"online"` and `processing_mode` `"manual"` when omitted. Follow it with
+  `process/3` to settle the order. If those fields are provided (atom or string
+  key), they must already match this flow; otherwise an `ArgumentError` is raised.
+
+  This is *not* Checkout Pro. For the hosted Checkout Pro flow, create a payment
+  preference with `Mercadopago.Preference.create/3` instead.
   """
-  @spec create_checkout_pro(Client.t(), map(), keyword()) :: HTTP.response()
-  def create_checkout_pro(%Client{} = client, order_data, opts \\ []) when is_map(order_data) do
-    checkout_pro_data =
+  @spec create_online(Client.t(), map(), keyword()) :: HTTP.response()
+  def create_online(%Client{} = client, order_data, opts \\ []) when is_map(order_data) do
+    online_data =
       order_data
-      |> put_checkout_pro_default!(:type, "online")
-      |> put_checkout_pro_default!(:processing_mode, "manual")
+      |> put_online_default!(:type, "online")
+      |> put_online_default!(:processing_mode, "manual")
 
-    HTTP.post(client, "/v1/orders", checkout_pro_data, opts)
+    HTTP.post(client, "/v1/orders", online_data, opts)
+  end
+
+  @doc """
+  Deprecated alias for `create_online/3`.
+
+  The name is inherited from the Ruby SDK but is a misnomer: `POST /v1/orders`
+  with `type: "online"` is the Checkout API (via Orders), which MercadoPago
+  documents separately from Checkout Pro. Checkout Pro lives in
+  `Mercadopago.Preference`.
+  """
+  @deprecated "Use create_online/3, or Mercadopago.Preference.create/3 for Checkout Pro"
+  @spec create_checkout_pro(Client.t(), map(), keyword()) :: HTTP.response()
+  def create_checkout_pro(%Client{} = client, order_data, opts \\ []) do
+    create_online(client, order_data, opts)
   end
 
   @doc "Fetches an order by id."
@@ -63,13 +80,22 @@ defmodule Mercadopago.Order do
     HTTP.get(client, "/v1/orders", filters, opts)
   end
 
-  # The field may come in with an atom or a string key. When absent, the
-  # Checkout Pro default is applied; when present, it must already match.
-  defp put_checkout_pro_default!(order_data, field, expected) do
+  # The field may come in with an atom or a string key. When absent, the default
+  # is applied using the key style the caller already uses, so the map does not
+  # end up with a mix of atom and string keys; when present, it must already match.
+  defp put_online_default!(order_data, field, expected) do
     case fetch_either(order_data, field, Atom.to_string(field)) do
-      :error -> Map.put(order_data, field, expected)
+      :error -> Map.put(order_data, default_key(order_data, field), expected)
       {:ok, ^expected} -> order_data
       {:ok, _other} -> raise ArgumentError, "Param #{field} must be #{expected}"
+    end
+  end
+
+  defp default_key(order_data, field) do
+    if Enum.any?(Map.keys(order_data), &is_binary/1) do
+      Atom.to_string(field)
+    else
+      field
     end
   end
 

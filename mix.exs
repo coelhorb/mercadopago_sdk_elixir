@@ -73,7 +73,6 @@ defmodule Mercadopago.MixProject do
   defp aliases do
     [
       ci: [
-        "format",
         "compile --warnings-as-errors",
         "format --check-formatted",
         "test --exclude integration",

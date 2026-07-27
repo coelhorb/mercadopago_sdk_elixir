@@ -31,7 +31,7 @@ defmodule Mercadopago.IndustryFieldsTest do
              Mercadopago.Payment.create(new(:payment_industry_fields), payment_data)
   end
 
-  test "Order.create_checkout_pro/3 forwards item, payer, and shipment industry fields" do
+  test "Order.create_online/3 forwards item, payer, and shipment industry fields" do
     Req.Test.stub(:order_industry_fields, fn conn ->
       {body, conn} = decoded_body(conn)
 
@@ -59,7 +59,7 @@ defmodule Mercadopago.IndustryFieldsTest do
     }
 
     assert {:ok, %{status: 200}} =
-             Mercadopago.Order.create_checkout_pro(new(:order_industry_fields), order_data)
+             Mercadopago.Order.create_online(new(:order_industry_fields), order_data)
   end
 
   test "Preference.create/3 forwards industry fields without filtering false values" do

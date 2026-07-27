@@ -7,8 +7,9 @@ defmodule Mercadopago.Webhook.Validator do
   an expected outcome for any public endpoint, so it is reported as data, not by
   raising. Use `validate!/5` when you prefer a raising variant.
 
-  QR Code notifications are not signed by MercadoPago — do not call this
-  validator for those events.
+  Legacy QR Code notifications are not signed by MercadoPago, so validation will
+  always fail for them. QR payments delivered through the Orders API *are* signed
+  and should be validated like any other event.
 
   ## Example
 
@@ -63,7 +64,9 @@ defmodule Mercadopago.Webhook.Validator do
 
     * `x_signature` - raw value of the `x-signature` request header
     * `x_request_id` - value of the `x-request-id` header (may be nil)
-    * `data_id` - value of the `data.id` query parameter (may be nil)
+    * `data_id` - value of the `data.id` query parameter (may be nil). Pass it
+      exactly as received; it is lowercased internally before the HMAC, as the
+      MercadoPago manifest requires.
     * `secret` - HMAC key configured in Tus Integraciones
 
   ## Options
@@ -190,10 +193,16 @@ defmodule Mercadopago.Webhook.Validator do
     end
   end
 
+  # MercadoPago builds the manifest from the lowercased `data.id`. Numeric payment
+  # ids are unaffected, but Orders send ULID-style ids (`ORD01JQ4S...`) that only
+  # verify once downcased. The caller's own copy is left untouched — lowercasing is
+  # a manifest-only concern, and the resource must still be fetched by its real id.
   defp verify_signature(data_id, x_req, ts, secret, received_hash) do
+    manifest = build_manifest(data_id && String.downcase(data_id), x_req, ts)
+
     computed =
       :hmac
-      |> :crypto.mac(:sha256, secret, build_manifest(data_id, x_req, ts))
+      |> :crypto.mac(:sha256, secret, manifest)
       |> Base.encode16(case: :lower)
 
     if constant_time_equal?(computed, received_hash) do

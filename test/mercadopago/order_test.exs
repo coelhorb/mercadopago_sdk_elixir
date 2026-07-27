@@ -8,9 +8,9 @@ defmodule Mercadopago.OrderTest do
     {Jason.decode!(body), conn}
   end
 
-  describe "create_checkout_pro/3" do
+  describe "create_online/3" do
     test "injects type and processing_mode defaults when omitted" do
-      Req.Test.stub(:order_cho_pro_defaults, fn conn ->
+      Req.Test.stub(:order_online_defaults, fn conn ->
         {body, conn} = decoded_body(conn)
         assert body["type"] == "online"
         assert body["processing_mode"] == "manual"
@@ -21,14 +21,14 @@ defmodule Mercadopago.OrderTest do
         |> Req.Test.json(%{"id" => "ord_123", "status" => "created"})
       end)
 
-      client = new(:order_cho_pro_defaults)
+      client = new(:order_online_defaults)
 
       assert {:ok, %{status: 201, response: %{"id" => "ord_123"}}} =
-               Mercadopago.Order.create_checkout_pro(client, %{total_amount: "100.00"})
+               Mercadopago.Order.create_online(client, %{total_amount: "100.00"})
     end
 
     test "keeps matching values provided with atom keys" do
-      Req.Test.stub(:order_cho_pro_atom, fn conn ->
+      Req.Test.stub(:order_online_atom, fn conn ->
         {body, conn} = decoded_body(conn)
         assert body["type"] == "online"
         assert body["processing_mode"] == "manual"
@@ -38,16 +38,16 @@ defmodule Mercadopago.OrderTest do
         |> Req.Test.json(%{"id" => "ord_124"})
       end)
 
-      client = new(:order_cho_pro_atom)
+      client = new(:order_online_atom)
 
       order_data = %{type: "online", processing_mode: "manual", total_amount: "50.00"}
 
       assert {:ok, %{status: 201, response: %{"id" => "ord_124"}}} =
-               Mercadopago.Order.create_checkout_pro(client, order_data)
+               Mercadopago.Order.create_online(client, order_data)
     end
 
     test "keeps matching values provided with string keys" do
-      Req.Test.stub(:order_cho_pro_string, fn conn ->
+      Req.Test.stub(:order_online_string, fn conn ->
         {body, conn} = decoded_body(conn)
         assert body["type"] == "online"
         assert body["processing_mode"] == "manual"
@@ -57,36 +57,76 @@ defmodule Mercadopago.OrderTest do
         |> Req.Test.json(%{"id" => "ord_125"})
       end)
 
-      client = new(:order_cho_pro_string)
+      client = new(:order_online_string)
 
       order_data = %{"type" => "online", "processing_mode" => "manual"}
 
       assert {:ok, %{status: 201, response: %{"id" => "ord_125"}}} =
-               Mercadopago.Order.create_checkout_pro(client, order_data)
+               Mercadopago.Order.create_online(client, order_data)
     end
 
     test "raises ArgumentError when type is incompatible" do
-      client = new(:order_cho_pro_bad_type)
+      client = new(:order_online_bad_type)
 
       assert_raise ArgumentError, "Param type must be online", fn ->
-        Mercadopago.Order.create_checkout_pro(client, %{type: "offline"})
+        Mercadopago.Order.create_online(client, %{type: "offline"})
       end
     end
 
     test "raises ArgumentError when processing_mode is incompatible (string key)" do
-      client = new(:order_cho_pro_bad_mode)
+      client = new(:order_online_bad_mode)
 
       assert_raise ArgumentError, "Param processing_mode must be manual", fn ->
-        Mercadopago.Order.create_checkout_pro(client, %{"processing_mode" => "automatic"})
+        Mercadopago.Order.create_online(client, %{"processing_mode" => "automatic"})
       end
     end
 
     test "raises ArgumentError instead of forwarding an explicit nil" do
-      client = new(:order_cho_pro_nil)
+      client = new(:order_online_nil)
 
       assert_raise ArgumentError, "Param type must be online", fn ->
-        Mercadopago.Order.create_checkout_pro(client, %{type: nil})
+        Mercadopago.Order.create_online(client, %{type: nil})
       end
+    end
+
+    test "defaults use string keys when the caller uses string keys" do
+      Req.Test.stub(:order_online_key_style, fn conn ->
+        {body, conn} = decoded_body(conn)
+        assert body["type"] == "online"
+        assert body["processing_mode"] == "manual"
+
+        Req.Test.json(conn, %{"id" => "ord_127"})
+      end)
+
+      client = new(:order_online_key_style)
+
+      # Only "total_amount" is given, so both defaults are injected. They must
+      # land as string keys to avoid a map mixing atom and string keys.
+      assert {:ok, %{status: 200}} =
+               Mercadopago.Order.create_online(client, %{"total_amount" => "10.00"})
+    end
+  end
+
+  describe "create_checkout_pro/3 (deprecated)" do
+    test "still delegates to create_online/3" do
+      Req.Test.stub(:order_deprecated_alias, fn conn ->
+        {body, conn} = decoded_body(conn)
+        assert body["type"] == "online"
+        assert body["processing_mode"] == "manual"
+
+        conn
+        |> Plug.Conn.put_status(201)
+        |> Req.Test.json(%{"id" => "ord_128"})
+      end)
+
+      client = new(:order_deprecated_alias)
+
+      # apply/3 is deliberate: a direct call would emit the deprecation warning
+      # this test exists to keep working.
+      # credo:disable-for-next-line Credo.Check.Refactor.Apply
+      result = apply(Mercadopago.Order, :create_checkout_pro, [client, %{total_amount: "1.00"}])
+
+      assert {:ok, %{status: 201, response: %{"id" => "ord_128"}}} = result
     end
   end
 

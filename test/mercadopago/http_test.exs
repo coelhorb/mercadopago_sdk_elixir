@@ -32,6 +32,120 @@ defmodule Mercadopago.HTTPTest do
     end
   end
 
+  describe "patch/4" do
+    test "sends a JSON body with the PATCH method" do
+      Req.Test.stub(:http_patch, fn conn ->
+        assert conn.method == "PATCH"
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        assert Jason.decode!(body) == %{"operating_mode" => "PDV"}
+
+        Req.Test.json(conn, %{"ok" => true})
+      end)
+
+      client = new(:http_patch)
+
+      assert {:ok, %{status: 200, response: %{"ok" => true}}} =
+               Mercadopago.HTTP.patch(client, "/v1/anything", %{operating_mode: "PDV"})
+    end
+
+    test "carries the standard auth and tracking headers" do
+      Req.Test.stub(:http_patch_headers, fn conn ->
+        assert Plug.Conn.get_req_header(conn, "authorization") == ["Bearer test_token"]
+        assert [_key] = Plug.Conn.get_req_header(conn, "x-idempotency-key")
+
+        Req.Test.json(conn, %{"ok" => true})
+      end)
+
+      client = new(:http_patch_headers)
+
+      assert {:ok, %{status: 200}} = Mercadopago.HTTP.patch(client, "/v1/anything", %{a: 1})
+    end
+  end
+
+  describe "multipart bodies" do
+    test "posts multipart/form-data when the body is {:multipart, parts}" do
+      Req.Test.stub(:http_multipart, fn conn ->
+        assert ["multipart/form-data; boundary=" <> _] =
+                 Plug.Conn.get_req_header(conn, "content-type")
+
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        assert body =~ "name=\"kind\""
+        assert body =~ "invoice"
+        assert body =~ "filename=\"proof.pdf\""
+        assert body =~ "%PDF-1.4 stub"
+
+        Req.Test.json(conn, %{"id" => "doc_1"})
+      end)
+
+      client = new(:http_multipart)
+
+      parts = [
+        {:kind, "invoice"},
+        {:file, {"%PDF-1.4 stub", filename: "proof.pdf", content_type: "application/pdf"}}
+      ]
+
+      assert {:ok, %{status: 200, response: %{"id" => "doc_1"}}} =
+               Mercadopago.HTTP.post(client, "/v1/anything", {:multipart, parts})
+    end
+
+    test "a plain map body is still sent as JSON" do
+      Req.Test.stub(:http_json_unchanged, fn conn ->
+        assert ["application/json" <> _] = Plug.Conn.get_req_header(conn, "content-type")
+
+        Req.Test.json(conn, %{"ok" => true})
+      end)
+
+      client = new(:http_json_unchanged)
+
+      assert {:ok, %{status: 200}} = Mercadopago.HTTP.post(client, "/v1/anything", %{a: 1})
+    end
+  end
+
+  describe "unwrap/1" do
+    test "unwraps a success to its body" do
+      assert {:ok, %{"id" => "pay_1"}} =
+               Mercadopago.HTTP.unwrap({:ok, %{status: 200, response: %{"id" => "pay_1"}}})
+    end
+
+    test "turns a 4xx into a Mercadopago.Error carrying status, body and cause" do
+      body = %{
+        "message" => "invalid_card_number",
+        "cause" => [%{"code" => "3034"}]
+      }
+
+      assert {:error, error} = Mercadopago.HTTP.unwrap({:ok, %{status: 400, response: body}})
+
+      assert %Mercadopago.Error{status: 400, response: ^body, cause: [%{"code" => "3034"}]} =
+               error
+
+      assert Exception.message(error) == "invalid_card_number (HTTP 400)"
+    end
+
+    test "falls back to a generic message when the body names no error" do
+      assert {:error, %Mercadopago.Error{message: message}} =
+               Mercadopago.HTTP.unwrap({:ok, %{status: 500, response: nil}})
+
+      assert message == "MercadoPago API error (HTTP 500)"
+    end
+
+    test "passes a transport failure through unchanged" do
+      assert {:error, :timeout} = Mercadopago.HTTP.unwrap({:error, :timeout})
+    end
+
+    test "composes with a real resource call" do
+      Req.Test.stub(:http_unwrap_live, fn conn ->
+        conn
+        |> Plug.Conn.put_status(404)
+        |> Req.Test.json(%{"message" => "Payment not found"})
+      end)
+
+      client = new(:http_unwrap_live)
+
+      assert {:error, %Mercadopago.Error{status: 404}} =
+               client |> Mercadopago.Payment.get("missing") |> Mercadopago.HTTP.unwrap()
+    end
+  end
+
   describe "per-call overrides" do
     test "access_token overrides the client token for one request" do
       Req.Test.stub(:http_token_override, fn conn ->

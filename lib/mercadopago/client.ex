@@ -16,7 +16,7 @@ defmodule Mercadopago.Client do
   ]
 
   @type t :: %__MODULE__{
-          access_token: String.t(),
+          access_token: String.t() | nil,
           plug: term() | nil,
           finch: atom() | nil,
           timeout: non_neg_integer(),

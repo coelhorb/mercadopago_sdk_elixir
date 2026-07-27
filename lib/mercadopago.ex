@@ -13,12 +13,28 @@ defmodule Mercadopago do
       Mercadopago.Payment.get(client, id, access_token: "OTHER_TOKEN")
       Mercadopago.Payment.create(client, data, custom_headers: %{"x-idempotency-key" => key})
       Mercadopago.Payment.search(client, filters, timeout: 5_000, max_retries: 1)
+
+  ## Handling errors
+
+  Every completed request is `{:ok, %{status: _, response: _}}` — a 404 included —
+  and `{:error, reason}` is reserved for transport failures. Pipe through
+  `Mercadopago.HTTP.unwrap/1` when you would rather branch on `{:ok, _}` /
+  `{:error, %Mercadopago.Error{}}` than on the status code:
+
+      case client |> Mercadopago.Payment.get(id) |> Mercadopago.HTTP.unwrap() do
+        {:ok, payment} -> payment
+        {:error, %Mercadopago.Error{status: 404}} -> nil
+      end
   """
 
   alias Mercadopago.Client
 
   @doc """
   Creates a new SDK client.
+
+  Pass `nil` as the token only to bootstrap the OAuth authorization-code flow,
+  where no token exists yet — the `Authorization` header is then omitted rather
+  than sent empty. See `Mercadopago.OAuth`.
 
   ## Options
 
@@ -38,8 +54,8 @@ defmodule Mercadopago do
       dedicated connection pooling; nil uses Req's default pool
     * `:plug` - Req plug for testing (e.g. `{Req.Test, :my_stub}`); nil in production
   """
-  @spec new(String.t(), keyword()) :: Client.t()
-  def new(access_token, opts \\ []) when is_binary(access_token) do
+  @spec new(String.t() | nil, keyword()) :: Client.t()
+  def new(access_token, opts \\ []) when is_binary(access_token) or is_nil(access_token) do
     %Client{
       access_token: access_token,
       plug: opts[:plug],
