@@ -50,7 +50,10 @@ defmodule Mercadopago.MixProject do
 
   defp deps do
     [
-      {:req, "~> 0.5"},
+      # Req is pre-1.0 and breaks API across minors, so the range is bounded to
+      # the 0.6 line: the SDK matches on %Req.TransportError{} and calls
+      # Req.Response.get_header/2 and Req.Test.transport_error/2.
+      {:req, "~> 0.6.0"},
       {:jason, "~> 1.2"},
       {:telemetry, "~> 1.0"},
       {:plug, "~> 1.0", only: :test},
