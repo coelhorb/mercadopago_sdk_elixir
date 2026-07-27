@@ -36,7 +36,39 @@ defmodule Mercadopago.MixProject do
     [
       main: "readme",
       extras: ["README.md", "CHANGELOG.md", "DIVERGENCES.md"],
-      source_url: @source_url
+      source_url: @source_url,
+      groups_for_modules: [
+        Core: [
+          Mercadopago,
+          Mercadopago.Client,
+          Mercadopago.HTTP,
+          Mercadopago.Error,
+          Mercadopago.Config
+        ],
+        Checkout: [Mercadopago.Preference, Mercadopago.Order, Mercadopago.OrderTransaction],
+        Payments: [
+          Mercadopago.Payment,
+          Mercadopago.PaymentMethods,
+          Mercadopago.Refund,
+          Mercadopago.Chargeback,
+          Mercadopago.CardToken,
+          Mercadopago.MerchantOrder
+        ],
+        Customers: [Mercadopago.Customer, Mercadopago.Card, Mercadopago.IdentificationType],
+        Subscriptions: [
+          Mercadopago.Preapproval,
+          Mercadopago.PreapprovalPlan,
+          Mercadopago.Invoice
+        ],
+        Marketplace: [
+          Mercadopago.OAuth,
+          Mercadopago.AdvancedPayment,
+          Mercadopago.DisbursementRefund
+        ],
+        "In-person": [Mercadopago.Point],
+        Webhooks: [Mercadopago.Webhook.Validator],
+        Account: [Mercadopago.User]
+      ]
     ]
   end
 

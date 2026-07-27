@@ -1,5 +1,11 @@
 defmodule Mercadopago.Chargeback do
-  @moduledoc "Payment dispute (chargeback) retrieval and search."
+  @moduledoc """
+  Payment dispute (chargeback) retrieval and search.
+
+  Read-only. Uploading supporting documentation is not exposed as a resource
+  function, but the transport supports it — see the multipart body form in
+  `Mercadopago.HTTP`.
+  """
 
   alias Mercadopago.{Client, HTTP}
 

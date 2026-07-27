@@ -1,5 +1,5 @@
 defmodule Mercadopago.Refund do
-  @moduledoc "Full or partial payment refunds."
+  @moduledoc "Full or partial payment refunds. To refund an order instead, see `Mercadopago.Order.refund/4`."
 
   alias Mercadopago.{Client, HTTP}
 

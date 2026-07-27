@@ -1,5 +1,12 @@
 defmodule Mercadopago.Order do
-  @moduledoc "Order lifecycle: create, process, capture, refund, cancel, and search."
+  @moduledoc """
+  Order lifecycle: create, process, capture, refund, cancel, and search.
+
+  These endpoints are the **Checkout API via Orders**, which MercadoPago
+  documents separately from Checkout Pro. If you want the hosted flow where the
+  buyer is redirected to MercadoPago, you want `Mercadopago.Preference` instead —
+  the similar shape of the two payloads makes them easy to confuse.
+  """
 
   alias Mercadopago.{Client, HTTP}
 

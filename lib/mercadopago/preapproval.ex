@@ -1,5 +1,5 @@
 defmodule Mercadopago.Preapproval do
-  @moduledoc "Recurring subscription management."
+  @moduledoc "Recurring subscription management. Plan templates live in `Mercadopago.PreapprovalPlan`."
 
   alias Mercadopago.{Client, HTTP}
 

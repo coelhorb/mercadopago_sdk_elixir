@@ -8,10 +8,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.2.1]
 
 Audited against MercadoPago's official MCP server
-(`https://mcp.mercadopago.com/mcp`), which cross-checks every public method
-against the live API documentation. Findings were re-verified against the code
-before being acted on. See [DIVERGENCES.md](DIVERGENCES.md) for every
-intentional departure from the reference Ruby SDK.
+(`https://mcp.mercadopago.com/mcp`), walking the SDK's routes against the live
+API documentation. Every finding was re-verified against the code before being
+acted on; those that could not be confirmed were not acted on. See
+[DIVERGENCES.md](DIVERGENCES.md) for every intentional departure from the
+reference Ruby SDK.
 
 No public function was removed or changed arity in this release.
 

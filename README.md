@@ -4,7 +4,11 @@
 [![Hex Docs](https://img.shields.io/badge/hex-docs-blue.svg)](https://hexdocs.pm/mercadopago_sdk_elixir)
 [![License](https://img.shields.io/hexpm/l/mercadopago_sdk_elixir.svg)](https://github.com/coelhorb/mercadopago_sdk_elixir/blob/main/LICENSE)
 
-Elixir client for the [MercadoPago REST API](https://www.mercadopago.com.br/developers/pt/docs), ported from the official Ruby SDK (feature parity with `mercadopago-sdk` 3.2.1).
+Elixir client for the [MercadoPago REST API](https://www.mercadopago.com.br/developers/pt/docs), ported from the official Ruby SDK.
+
+Resource coverage matches `mercadopago-sdk` 3.2.1 one for one. Behaviour matches
+it too, except where the Ruby SDK is demonstrably wrong — those departures are
+deliberate and each one is recorded in [DIVERGENCES.md](DIVERGENCES.md).
 
 ## Validated against MercadoPago's MCP server
 
@@ -15,16 +19,20 @@ documentation through their official MCP server:
 claude mcp add --transport http mercadopago https://mcp.mercadopago.com/mcp
 ```
 
-Of the 62 distinct verb/route pairs the SDK exposes, 41 were confirmed against
-the current documentation, 8 target APIs MercadoPago now classifies as legacy,
-and the remainder are either undocumented in the public reference or corroborated
-only indirectly. One contradicted the docs outright and was fixed.
+The SDK's 62 distinct verb/route pairs were walked against the current reference.
+The audit turned up one outright contradiction — the webhook signature manifest,
+fixed in this release — plus a set of endpoints MercadoPago now classifies as
+legacy and others its public reference does not cover.
 
-Every finding was then re-verified against the source before being acted on —
-several did not survive that check, including a claim that Checkout Pro was
-missing (it is implemented as `Mercadopago.Preference`). To be clear about what
-this means: the MCP server is a documentation source, not a conformance suite. It
-tells you what the API says it does, not that this client is certified.
+Every finding was then re-verified against the source before being acted on, and
+several did not survive that check: the audit reported Checkout Pro as missing
+when `Mercadopago.Preference` implements it, and it missed a defect in the CI
+gate entirely. Findings that could not be confirmed against the code or the docs
+were not acted on, and are not claimed here.
+
+To be clear about what this does and does not mean: the MCP server is a
+documentation source, not a conformance suite. It reports what the API says it
+does — it does not certify this client, and no such certification exists.
 
 ## What changed in 0.2.1
 

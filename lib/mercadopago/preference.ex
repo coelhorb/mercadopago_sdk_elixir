@@ -1,5 +1,11 @@
 defmodule Mercadopago.Preference do
-  @moduledoc "Checkout Pro payment preferences."
+  @moduledoc """
+  Checkout Pro payment preferences.
+
+  This is the hosted flow: create a preference, then redirect the buyer to the
+  `init_point` MercadoPago returns. For the Checkout API — where you own the
+  payment form — see `Mercadopago.Order` and `Mercadopago.Payment`.
+  """
 
   alias Mercadopago.{Client, HTTP}
 

@@ -1,5 +1,13 @@
 defmodule Mercadopago.Point do
-  @moduledoc "In-person payment intents on MercadoPago Point (POS) devices."
+  @moduledoc """
+  In-person payment intents on MercadoPago Point (POS) devices.
+
+  These wrap the `/point/integration-api/*` payment-intent endpoints, which
+  MercadoPago now classifies as legacy. The newer Orders-based Point flow and the
+  `/terminals/v1/*` endpoints are not exposed yet, and neither is the
+  operating-mode change (`PATCH /point/integration-api/devices/{id}`), though
+  `Mercadopago.HTTP.patch/4` now makes the latter reachable directly.
+  """
 
   alias Mercadopago.{Client, HTTP}
 

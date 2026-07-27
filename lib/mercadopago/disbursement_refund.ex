@@ -1,5 +1,9 @@
 defmodule Mercadopago.DisbursementRefund do
-  @moduledoc "Refunds on individual disbursements within an advanced payment (marketplace split)."
+  @moduledoc """
+  Refunds on individual disbursements within an advanced payment (marketplace split).
+
+  The advanced payments themselves live in `Mercadopago.AdvancedPayment`.
+  """
 
   alias Mercadopago.{Client, HTTP}
 

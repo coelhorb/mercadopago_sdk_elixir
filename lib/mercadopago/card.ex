@@ -1,5 +1,5 @@
 defmodule Mercadopago.Card do
-  @moduledoc "Stored cards linked to a customer."
+  @moduledoc "Stored cards linked to a customer. Customers themselves live in `Mercadopago.Customer`."
 
   alias Mercadopago.{Client, HTTP}
 

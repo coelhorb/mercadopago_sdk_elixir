@@ -1,5 +1,5 @@
 defmodule Mercadopago.Customer do
-  @moduledoc "Customer record management."
+  @moduledoc "Customer record management. Their stored cards live in `Mercadopago.Card`."
 
   alias Mercadopago.{Client, HTTP}
 
