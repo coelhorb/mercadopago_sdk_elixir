@@ -5,6 +5,25 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.2]
+
+### Changed
+
+- **`req` floor lowered from `~> 0.7.4` to `~> 0.7.0`**, widening the range to
+  the whole 0.7 line. Both forms already cap at `< 0.8.0` and pick up future
+  0.7 patches; 0.7.4 was simply tighter than anything this SDK needs, and a
+  library's bounds are a constraint imposed on every consumer's tree.
+
+  The floor was set at 0.7.4 out of caution over `form_multipart`, which Req
+  0.7.2 listed as "bring back `form_multipart: [{string_name, value}]`". That
+  regression was in *string* part names; this SDK uses atoms, and the full suite
+  passes against 0.7.0. Measured, not assumed.
+
+  Note for anyone tempted to write `~> 0.7`: the two-part form means
+  `>= 0.7.0 and < 1.0.0`, which would let Req 0.8 in. 0.8 drops Jason in favour
+  of `JSON.encode!/2`, replaces the `retry` step with `Req.Retry`, and requires
+  Elixir 1.18 — three minors above this SDK's floor.
+
 ## [0.3.1]
 
 Dependency migration. No change to this SDK's own API — `Mercadopago.new/2`
@@ -213,6 +232,7 @@ No public function was removed or changed arity in this release.
 
 - Initial release.
 
+[0.3.2]: https://github.com/coelhorb/mercadopago_sdk_elixir/tree/v0.3.2
 [0.3.1]: https://github.com/coelhorb/mercadopago_sdk_elixir/tree/v0.3.1
 [0.3.0]: https://github.com/coelhorb/mercadopago_sdk_elixir/tree/v0.3.0
 [0.2.1]: https://github.com/coelhorb/mercadopago_sdk_elixir/tree/v0.2.1

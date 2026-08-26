@@ -6,7 +6,7 @@ defmodule Mercadopago.MixProject do
   def project do
     [
       app: :mercadopago_sdk_elixir,
-      version: "0.3.1",
+      version: "0.3.2",
       elixir: "~> 1.15",
       start_permanent: Mix.env() == :prod,
       elixirc_paths: elixirc_paths(Mix.env()),
@@ -90,7 +90,9 @@ defmodule Mercadopago.MixProject do
       # :plug, :finch, :receive_timeout, :params, :json and :form_multipart.
       # 0.8 is not a bump away — it drops jason for JSON, replaces the retry step
       # with Req.Retry, and requires Elixir 1.18, three minors above our floor.
-      {:req, "~> 0.7.4"},
+      # The floor is 0.7.0 because the suite passes there: 0.7.2 restored
+      # form_multipart for *string* part names, and this SDK uses atoms.
+      {:req, "~> 0.7.0"},
       # Only :telemetry.span/3 and :telemetry.execute/3 are used, both present
       # since 1.0. Telemetry is shared with Phoenix, Ecto, Finch and Plug, so a
       # higher floor here would buy nothing and could conflict in a consumer's
