@@ -5,6 +5,86 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0]
+
+Synced with the official Ruby SDK 3.4.0 (this SDK was at 3.2.1). See
+[DIVERGENCES.md](DIVERGENCES.md) for every intentional departure from it.
+
+No public function was removed or changed arity.
+
+### Fixed
+
+- **Webhook replay tolerance rejected every notification.**
+  `Mercadopago.Webhook.Validator` compared the `ts` from the `x-signature`
+  header, which MercadoPago sends in **seconds**, against a clock in
+  **milliseconds**. The computed drift was therefore around 55 years, so
+  **passing `tolerance_seconds:` rejected every webhook** with
+  `:timestamp_out_of_tolerance` — the option meant to harden replay protection
+  was the one thing that broke validation. Callers who left it unset were
+  unaffected, which is why this went unnoticed. The reference Ruby SDK carried
+  the same defect until 3.3.0. The test fixture used a millisecond `ts` and a
+  clock derived from it, so it agreed with the bug; it now uses a realistic
+  ten-digit `ts` and a real millisecond clock.
+
+  **Every version published before this one is affected** — 0.1.0, 0.2.0 and
+  0.2.1. The defect dates from the first commit. Two things to check before
+  deploying the upgrade, both covered in
+  [Upgrading from 0.2.x](README.md#upgrading-from-02x):
+
+  1. Your webhook endpoint has been rejecting everything, so MercadoPago has
+     been retrying. Those retries will start succeeding — **the handler must be
+     idempotent**.
+  2. If you worked around the bug by passing `:now` in seconds, that inverts:
+     it used to widen the window 1000×, and now rejects everything. Drop the
+     option or return `:os.system_time(:millisecond)`. The SDK warns when it is
+     handed a clock in the wrong unit.
+
+### Added
+
+- `Mercadopago.Pagination.stream/3` and a `search_stream/3` on every resource
+  with a `search/3` — `AdvancedPayment`, `Chargeback`, `Customer`, `Invoice`,
+  `MerchantOrder`, `Order`, `Payment`, `Preapproval`, `PreapprovalPlan`,
+  `Preference` and `Subscription`. Lazily walks the `limit`/`offset` pages and
+  yields the records. Reads the `results`, `data` (Orders v2) and `elements`
+  shapes, and accepts `paging.total` as an integer or a string. A failure
+  mid-walk raises rather than truncating the stream silently.
+- `:kind` on `Mercadopago.Error` — the class of failure as an atom
+  (`:not_found`, `:rate_limit`, `:server`, …), from the same status mapping the
+  Ruby SDK gives its twelve exception subclasses. One struct with a matchable
+  field, rather than twelve modules.
+- `:request_id` and `:retry_after` on `Mercadopago.Error`, lifted from the
+  `x-request-id` and `Retry-After` response headers.
+- `Mercadopago.Card.update/5`, `Mercadopago.Payment.capture/4`,
+  `Mercadopago.Preference.search/3` and `Mercadopago.Refund.get/4`.
+- `Mercadopago.Subscription`, mirroring the Ruby SDK's `sdk.subscription`. The
+  same `/preapproval` endpoints `Mercadopago.Preapproval` already exposed; every
+  function delegates to it.
+- `:retry_on`, on the client and per call, to choose which HTTP statuses make a
+  GET worth retrying (default `[429, 500, 502, 503, 504]`). Retryable transport
+  failures are retried regardless.
+- A warning when `Mercadopago.Webhook.Validator` is given a `:now` function
+  returning what looks like seconds rather than milliseconds — the shape of the
+  pre-0.3.0 workaround for the bug above, which stops working once the unit is
+  correct.
+- `[:mercadopago, :request, :retry]` telemetry event, fired just before each
+  backoff sleep with `%{delay: milliseconds}` and the failed attempt's metadata.
+  This is the SDK's equivalent of the Ruby SDK's `on_retry` callback.
+- Examples for Automatic Payments through Orders
+  (`examples/order/create_automatic_payment.exs`, the two-step CIT → MIT flow)
+  and for CREDENTIAL_ON_FILE payments (`examples/payment/credential_on_file.exs`).
+  Note the field is `previous_transaction_reference`; the Ruby SDK renamed it
+  from `prev_transaction_ref` in 3.4.0.
+
+### Changed
+
+- The response map carries two more keys: `:request_id` and `:retry_after`, each
+  `nil` when the server sent no such header. So a completed request is now
+  `{:ok, %{status: _, response: _, request_id: _, retry_after: _}}`.
+  Pattern matches on maps are partial, so `%{status: status, response: body}`
+  keeps working — **the one thing that breaks is comparing the whole map for
+  equality**, e.g. `result == {:ok, %{status: 200, response: body}}`. Match
+  instead of comparing.
+
 ## [0.2.1]
 
 Audited against MercadoPago's official MCP server
@@ -85,6 +165,7 @@ No public function was removed or changed arity in this release.
 
 - Initial release.
 
+[0.3.0]: https://github.com/coelhorb/mercadopago_sdk_elixir/tree/v0.3.0
 [0.2.1]: https://github.com/coelhorb/mercadopago_sdk_elixir/tree/v0.2.1
 [0.2.0]: https://github.com/coelhorb/mercadopago_sdk_elixir/tree/v0.2.0
 [0.1.0]: https://github.com/coelhorb/mercadopago_sdk_elixir/tree/v0.1.0

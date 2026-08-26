@@ -6,7 +6,7 @@ defmodule Mercadopago.MixProject do
   def project do
     [
       app: :mercadopago_sdk_elixir,
-      version: "0.2.1",
+      version: "0.3.0",
       elixir: "~> 1.15",
       start_permanent: Mix.env() == :prod,
       elixirc_paths: elixirc_paths(Mix.env()),
@@ -43,6 +43,7 @@ defmodule Mercadopago.MixProject do
           Mercadopago.Client,
           Mercadopago.HTTP,
           Mercadopago.Error,
+          Mercadopago.Pagination,
           Mercadopago.Config
         ],
         Checkout: [Mercadopago.Preference, Mercadopago.Order, Mercadopago.OrderTransaction],
@@ -57,6 +58,7 @@ defmodule Mercadopago.MixProject do
         Customers: [Mercadopago.Customer, Mercadopago.Card, Mercadopago.IdentificationType],
         Subscriptions: [
           Mercadopago.Preapproval,
+          Mercadopago.Subscription,
           Mercadopago.PreapprovalPlan,
           Mercadopago.Invoice
         ],
