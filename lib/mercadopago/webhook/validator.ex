@@ -29,6 +29,8 @@ defmodule Mercadopago.Webhook.Validator do
       :ok = Mercadopago.Webhook.Validator.validate!(x_sig, x_req, data_id, secret)
   """
 
+  require Logger
+
   defmodule InvalidSignatureError do
     @moduledoc "Returned (or raised by `validate!/5`) when a webhook signature cannot be verified."
     defexception [:reason, :request_id, :timestamp, :message]
@@ -53,6 +55,10 @@ defmodule Mercadopago.Webhook.Validator do
     end
   end
 
+  # A millisecond clock is past this from 1973 on; a seconds clock stays below it
+  # until the year 5138. Anything under it was handed to us in the wrong unit.
+  @milliseconds_floor 100_000_000_000
+
   @default_versions ["v1"]
   @version_regex ~r/\Av\d+\z/
   @digits_regex ~r/\A\d+\z/
@@ -71,9 +77,13 @@ defmodule Mercadopago.Webhook.Validator do
 
   ## Options
 
-    * `:tolerance_seconds` - max allowed drift between header timestamp and now
+    * `:tolerance_seconds` - max allowed drift between the header timestamp and
+      now. The `ts` MercadoPago sends is in **seconds**; the drift is computed
+      against `:now`, which is in **milliseconds**. Left unset (the default),
+      no replay window is enforced — see the note below.
     * `:supported_versions` - list of accepted signature versions (default: `["v1"]`)
-    * `:now` - zero-arity function returning current time in milliseconds (for testing)
+    * `:now` - zero-arity function returning the current time in **milliseconds**
+      since the Unix epoch (for testing)
 
   ## Returns
 
@@ -226,8 +236,12 @@ defmodule Mercadopago.Webhook.Validator do
 
   defp check_tolerance(_ts, _x_req, nil, _now_fn), do: :ok
 
+  # The `ts` in the x-signature header is in seconds; `now_fn` answers in
+  # milliseconds. Comparing them directly makes the drift look like ~55 years,
+  # so every webhook with a tolerance configured is rejected. The reference Ruby
+  # SDK carried the same defect until 3.3.0.
   defp check_tolerance(ts, x_req, tolerance_seconds, now_fn) do
-    drift_ms = abs(now_fn.() - String.to_integer(ts))
+    drift_ms = abs(milliseconds(now_fn.()) - String.to_integer(ts) * 1_000)
 
     if drift_ms > tolerance_seconds * 1_000 do
       {:error, error(:timestamp_out_of_tolerance, x_req, ts)}
@@ -235,6 +249,24 @@ defmodule Mercadopago.Webhook.Validator do
       :ok
     end
   end
+
+  # Before 0.3.0 the drift was computed against an unscaled `ts`, so handing
+  # `:now` a clock in seconds was the only way to make `tolerance_seconds` do
+  # anything — at a window 1000x wider than the one asked for. With the unit
+  # fixed that workaround inverts and rejects every notification instead, so name
+  # the cause rather than leaving a bare :timestamp_out_of_tolerance behind.
+  defp milliseconds(now) when is_integer(now) and now < @milliseconds_floor do
+    Logger.warning("""
+    Mercadopago.Webhook.Validator: the :now function returned #{now}, which looks \
+    like seconds, not milliseconds. Every notification will be rejected as \
+    :timestamp_out_of_tolerance. Return :os.system_time(:millisecond), or drop \
+    the :now option to use the default clock.\
+    """)
+
+    now
+  end
+
+  defp milliseconds(now), do: now
 
   defp constant_time_equal?(a, b) when byte_size(a) != byte_size(b), do: false
 

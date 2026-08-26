@@ -1,11 +1,14 @@
 defmodule Mercadopago.Webhook.ValidatorTest do
   use ExUnit.Case, async: true
 
+  import ExUnit.CaptureLog
+
   alias Mercadopago.Webhook.Validator
   alias Mercadopago.Webhook.Validator.InvalidSignatureError
 
   @secret "test_secret"
-  @ts "1704067200000"
+  # Seconds since the epoch, as MercadoPago sends it in the x-signature header.
+  @ts "1704067200"
   @data_id "123"
   @request_id "req-abc"
 
@@ -110,13 +113,30 @@ defmodule Mercadopago.Webhook.ValidatorTest do
     end
 
     test "timestamp tolerance passes when drift is within limit" do
-      now_ms = String.to_integer(@ts) + 100_000
+      now_ms = String.to_integer(@ts) * 1_000 + 100_000
       now_fn = fn -> now_ms end
 
       assert {:ok, @ts} =
                Validator.validate(valid_header(), @request_id, @data_id, @secret,
                  tolerance_seconds: 200,
                  now: now_fn
+               )
+    end
+
+    # Regression: `ts` is in seconds and the default clock is in milliseconds.
+    # Comparing them unscaled makes a fresh notification look ~55 years stale,
+    # so every webhook validated with a tolerance was rejected.
+    test "a fresh notification passes against the real millisecond clock" do
+      now_seconds = System.system_time(:second)
+      ts = Integer.to_string(now_seconds - 5)
+
+      assert {:ok, ^ts} =
+               Validator.validate(
+                 valid_header(@data_id, @request_id, ts),
+                 @request_id,
+                 @data_id,
+                 @secret,
+                 tolerance_seconds: 300
                )
     end
   end
@@ -180,9 +200,56 @@ defmodule Mercadopago.Webhook.ValidatorTest do
     end
   end
 
+  describe "validate/5 — a :now in the wrong unit" do
+    # The pre-0.3.0 workaround (a :now in seconds) does not silently widen the
+    # window once the unit is fixed — it rejects everything. The warning is what
+    # tells the integrator why their webhooks stopped, instead of a bare
+    # :timestamp_out_of_tolerance.
+    test "warns and rejects when the clock looks like seconds rather than milliseconds" do
+      now_seconds = System.system_time(:second)
+      ts = Integer.to_string(now_seconds - 5)
+
+      log =
+        capture_log(fn ->
+          assert {:error, %InvalidSignatureError{reason: :timestamp_out_of_tolerance}} =
+                   Validator.validate(
+                     valid_header(@data_id, @request_id, ts),
+                     @request_id,
+                     @data_id,
+                     @secret,
+                     tolerance_seconds: 300,
+                     now: fn -> now_seconds end
+                   )
+        end)
+
+      assert log =~ "looks like seconds, not milliseconds"
+    end
+
+    test "stays quiet for a millisecond clock" do
+      log =
+        capture_log(fn ->
+          Validator.validate(valid_header(), @request_id, @data_id, @secret,
+            tolerance_seconds: 300,
+            now: fn -> String.to_integer(@ts) * 1_000 end
+          )
+        end)
+
+      refute log =~ "milliseconds"
+    end
+
+    test "stays quiet when no tolerance is configured" do
+      log =
+        capture_log(fn ->
+          assert {:ok, @ts} = Validator.validate(valid_header(), @request_id, @data_id, @secret)
+        end)
+
+      refute log =~ "milliseconds"
+    end
+  end
+
   describe "validate/5 — timestamp_out_of_tolerance" do
     test "errors when drift exceeds tolerance" do
-      now_ms = String.to_integer(@ts) + 400_000
+      now_ms = String.to_integer(@ts) * 1_000 + 400_000
       now_fn = fn -> now_ms end
 
       assert {:error, %InvalidSignatureError{reason: :timestamp_out_of_tolerance}} =
