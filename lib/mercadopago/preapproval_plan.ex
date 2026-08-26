@@ -1,12 +1,23 @@
 defmodule Mercadopago.PreapprovalPlan do
   @moduledoc "Subscription plan templates. Subscriptions created from them live in `Mercadopago.Preapproval`."
 
-  alias Mercadopago.{Client, HTTP}
+  alias Mercadopago.{Client, HTTP, Pagination}
 
   @doc "Searches preapproval plans matching `filters` (query-string parameters)."
   @spec search(Client.t(), map() | nil, keyword()) :: HTTP.response()
   def search(%Client{} = client, filters \\ nil, opts \\ []) do
     HTTP.get(client, "/preapproval_plan/search", filters, opts)
+  end
+
+  @doc """
+  Streams every result of `search/3`, fetching each page as it is consumed.
+
+  See `Mercadopago.Pagination.stream/3` for the options and for how failures are
+  reported.
+  """
+  @spec search_stream(Client.t(), map() | nil, keyword()) :: Enumerable.t()
+  def search_stream(%Client{} = client, filters \\ nil, opts \\ []) do
+    Pagination.stream(&search(client, &1, opts), filters, opts)
   end
 
   @doc "Fetches a preapproval plan by id."

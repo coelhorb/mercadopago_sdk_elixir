@@ -65,6 +65,8 @@ defmodule Mercadopago.PathParamTest do
        :update_release_date, [id, "2026-07-27 12:00:00.000000"]},
       {"GET", "/v1/customers/#{encoded}/cards/#{encoded}", Mercadopago.Card, :get, [id, id]},
       {"POST", "/v1/customers/#{encoded}/cards/", Mercadopago.Card, :create, [id, data]},
+      {"PUT", "/v1/customers/#{encoded}/cards/#{encoded}", Mercadopago.Card, :update,
+       [id, id, data]},
       {"DELETE", "/v1/customers/#{encoded}/cards/#{encoded}", Mercadopago.Card, :delete,
        [id, id]},
       {"GET", "/v1/customers/#{encoded}/cards", Mercadopago.Card, :list, [id]},
@@ -95,6 +97,7 @@ defmodule Mercadopago.PathParamTest do
        :delete, [id, id]},
       {"GET", "/v1/payments/#{encoded}", Mercadopago.Payment, :get, [id]},
       {"PUT", "/v1/payments/#{encoded}", Mercadopago.Payment, :update, [id, data]},
+      {"PUT", "/v1/payments/#{encoded}", Mercadopago.Payment, :capture, [id]},
       {"POST", "/point/integration-api/devices/#{encoded}/payment-intents", Mercadopago.Point,
        :create, [id, data]},
       {"GET", "/point/integration-api/payment-intents/#{encoded}", Mercadopago.Point, :get, [id]},
@@ -102,11 +105,14 @@ defmodule Mercadopago.PathParamTest do
        Mercadopago.Point, :cancel, [id, id]},
       {"GET", "/preapproval/#{encoded}", Mercadopago.Preapproval, :get, [id]},
       {"PUT", "/preapproval/#{encoded}", Mercadopago.Preapproval, :update, [id, data]},
+      {"GET", "/preapproval/#{encoded}", Mercadopago.Subscription, :get, [id]},
+      {"PUT", "/preapproval/#{encoded}", Mercadopago.Subscription, :update, [id, data]},
       {"GET", "/preapproval_plan/#{encoded}", Mercadopago.PreapprovalPlan, :get, [id]},
       {"PUT", "/preapproval_plan/#{encoded}", Mercadopago.PreapprovalPlan, :update, [id, data]},
       {"GET", "/checkout/preferences/#{encoded}", Mercadopago.Preference, :get, [id]},
       {"PUT", "/checkout/preferences/#{encoded}", Mercadopago.Preference, :update, [id, data]},
       {"GET", "/v1/payments/#{encoded}/refunds", Mercadopago.Refund, :list, [id]},
+      {"GET", "/v1/payments/#{encoded}/refunds/#{encoded}", Mercadopago.Refund, :get, [id, id]},
       {"POST", "/v1/payments/#{encoded}/refunds", Mercadopago.Refund, :create, [id]}
     ]
   end

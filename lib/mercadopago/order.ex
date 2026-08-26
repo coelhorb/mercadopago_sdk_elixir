@@ -8,7 +8,7 @@ defmodule Mercadopago.Order do
   the similar shape of the two payloads makes them easy to confuse.
   """
 
-  alias Mercadopago.{Client, HTTP}
+  alias Mercadopago.{Client, HTTP, Pagination}
 
   @doc "Creates an order from `order_data`."
   @spec create(Client.t(), map(), keyword()) :: HTTP.response()
@@ -85,6 +85,17 @@ defmodule Mercadopago.Order do
   @spec search(Client.t(), map() | nil, keyword()) :: HTTP.response()
   def search(%Client{} = client, filters \\ nil, opts \\ []) do
     HTTP.get(client, "/v1/orders", filters, opts)
+  end
+
+  @doc """
+  Streams every result of `search/3`, fetching each page as it is consumed.
+
+  See `Mercadopago.Pagination.stream/3` for the options and for how failures are
+  reported.
+  """
+  @spec search_stream(Client.t(), map() | nil, keyword()) :: Enumerable.t()
+  def search_stream(%Client{} = client, filters \\ nil, opts \\ []) do
+    Pagination.stream(&search(client, &1, opts), filters, opts)
   end
 
   # The field may come in with an atom or a string key. When absent, the default

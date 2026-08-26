@@ -12,14 +12,16 @@ defmodule Mercadopago.HTTP do
     * `:max_retries` - GET retry budget for this request only
     * `:retry_delay` - base backoff in milliseconds for this request only
     * `:max_retry_delay` - backoff ceiling in milliseconds for this request only
+    * `:retry_on` - list of HTTP statuses to retry for this request only
 
   ## Retry policy
 
-  A GET is retried while the response status is one of
-  `#{inspect([429, 500, 502, 503, 504])}` or the request fails with a retryable
+  A GET is retried while the response status is one of `:retry_on` (default
+  `#{inspect([429, 500, 502, 503, 504])}`) or the request fails with a retryable
   transport error (a connection closed under the pool, a refused or unreachable
   host). A `:timeout` is never retried: the receive timeout has already spent
-  the latency budget.
+  the latency budget. Transport errors are retried regardless of `:retry_on`,
+  which only ever narrows or widens the *statuses*.
 
   Backoff is exponential from `:retry_delay`, doubled per attempt, capped by
   `:max_retry_delay`, plus jitter so that concurrent callers do not come back
@@ -40,13 +42,19 @@ defmodule Mercadopago.HTTP do
   Metadata carries `:method`, `:path` and `:attempt` (zero-based), plus
   `:status` on a completed request or `:error` on a transport failure. Neither
   the access token nor the request body is ever included.
+
+  One more event fires just before the SDK sleeps to retry:
+
+    * `[:mercadopago, :request, :retry]` - measurements `%{delay: milliseconds}`,
+      the same metadata as above describing the attempt that *failed*
+
+  Attach to it for the equivalent of a per-retry callback — to count retries, or
+  to log the status that provoked one.
   """
 
   import Bitwise
 
   alias Mercadopago.{Client, Config}
-
-  @retryable_statuses [429, 500, 502, 503, 504]
 
   # Transport failures worth retrying on GET. `:timeout` is deliberately absent.
   @retryable_transport_reasons [:closed, :econnrefused, :ehostunreach]
@@ -60,9 +68,19 @@ defmodule Mercadopago.HTTP do
   when the response is not JSON (an HTML error page from a proxy, for
   instance). `{:error, reason}` is returned for transport-level failures
   (timeouts, connection errors).
+
+  It also carries two diagnostics lifted from the response headers, each `nil`
+  when the header was absent: `:request_id` (`x-request-id`, the identifier
+  MercadoPago support asks for) and `:retry_after` (`Retry-After`, in seconds).
   """
   @type response ::
-          {:ok, %{status: non_neg_integer(), response: map() | list() | binary() | nil}}
+          {:ok,
+           %{
+             status: non_neg_integer(),
+             response: map() | list() | binary() | nil,
+             request_id: String.t() | nil,
+             retry_after: non_neg_integer() | nil
+           }}
           | {:error, term()}
 
   @typedoc """
@@ -100,8 +118,12 @@ defmodule Mercadopago.HTTP do
   Reach for it when the status code carries no information you act on.
   """
   @spec unwrap(response()) :: {:ok, map() | list() | binary() | nil} | {:error, term()}
-  def unwrap({:ok, %{status: status, response: body}}) when status >= 400 do
-    {:error, Mercadopago.Error.new(status, body)}
+  def unwrap({:ok, %{status: status, response: body} = response}) when status >= 400 do
+    {:error,
+     Mercadopago.Error.new(status, body,
+       request_id: response[:request_id],
+       retry_after: response[:retry_after]
+     )}
   end
 
   def unwrap({:ok, %{response: body}}), do: {:ok, body}
@@ -169,12 +191,24 @@ defmodule Mercadopago.HTTP do
   defp do_get(url, path, req_opts, config, attempt) do
     result = execute(:get, url, path, req_opts, attempt)
 
-    if attempt < config.max_retries - 1 and retryable?(result) do
-      wait_before_retry(retry_after_ms(result), attempt, config)
+    if attempt < config.max_retries - 1 and retryable?(result, config.retry_on) do
+      delay = retry_delay(retry_after_ms(result), attempt, config)
+      announce_retry(:get, path, attempt, delay, result)
+      Process.sleep(delay)
       do_get(url, path, req_opts, config, attempt + 1)
     else
       to_response(result)
     end
+  end
+
+  defp announce_retry(method, path, attempt, delay, result) do
+    metadata = %{method: method, path: path, attempt: attempt}
+
+    :telemetry.execute(
+      [:mercadopago, :request, :retry],
+      %{delay: delay},
+      Map.merge(metadata, result_metadata(result))
+    )
   end
 
   defp request(method, uri, req_opts) do
@@ -195,37 +229,62 @@ defmodule Mercadopago.HTTP do
   defp result_metadata({:ok, %{status: status}}), do: %{status: status}
   defp result_metadata({:error, reason}), do: %{error: reason}
 
-  defp retryable?({:ok, %{status: status}}), do: status in @retryable_statuses
+  defp retryable?({:ok, %{status: status}}, retry_on), do: status in retry_on
 
-  defp retryable?({:error, %Req.TransportError{reason: reason}}) do
+  defp retryable?({:error, %Req.TransportError{reason: reason}}, _retry_on) do
     reason in @retryable_transport_reasons
   end
 
-  defp retryable?({:error, _reason}), do: false
+  defp retryable?({:error, _reason}, _retry_on), do: false
 
   defp retry_after_ms({:ok, %Req.Response{} = response}) do
-    with [value | _rest] <- Req.Response.get_header(response, "retry-after"),
-         {seconds, ""} when seconds >= 0 <- Integer.parse(value) do
-      seconds * 1_000
-    else
-      # Absent, or the HTTP-date form, which falls back to exponential backoff.
-      _other -> nil
+    case retry_after_seconds(response) do
+      nil -> nil
+      seconds -> seconds * 1_000
     end
   end
 
   defp retry_after_ms({:error, _reason}), do: nil
 
+  # Only the delta-seconds form is understood; the HTTP-date form falls back to
+  # exponential backoff and is reported as no `Retry-After` at all.
+  defp retry_after_seconds(%Req.Response{} = response) do
+    with [value | _rest] <- Req.Response.get_header(response, "retry-after"),
+         {seconds, ""} when seconds >= 0 <- Integer.parse(value) do
+      seconds
+    else
+      _other -> nil
+    end
+  end
+
+  defp retry_after_seconds(_response), do: nil
+
+  defp header(%Req.Response{} = response, name) do
+    case Req.Response.get_header(response, name) do
+      [value | _rest] -> value
+      [] -> nil
+    end
+  end
+
+  defp header(_response, _name), do: nil
+
   # Exponential backoff with jitter. `Retry-After` wins when the server sends
   # it, but is capped like any other delay so that a mistaken or hostile value
   # cannot pin the calling process for minutes.
-  defp wait_before_retry(retry_after_ms, attempt, config) do
+  defp retry_delay(retry_after_ms, attempt, config) do
     delay = min(retry_after_ms || config.retry_delay <<< attempt, config.max_retry_delay)
 
-    Process.sleep(delay + :rand.uniform(div(delay, 4) + 1))
+    delay + :rand.uniform(div(delay, 4) + 1)
   end
 
-  defp to_response({:ok, %{status: status, body: body}}) do
-    {:ok, %{status: status, response: normalize_body(body)}}
+  defp to_response({:ok, %{status: status, body: body} = response}) do
+    {:ok,
+     %{
+       status: status,
+       response: normalize_body(body),
+       request_id: header(response, "x-request-id"),
+       retry_after: retry_after_seconds(response)
+     }}
   end
 
   defp to_response({:error, reason}), do: {:error, reason}
@@ -240,6 +299,7 @@ defmodule Mercadopago.HTTP do
       max_retries: opts[:max_retries] || client.max_retries,
       retry_delay: opts[:retry_delay] || client.retry_delay,
       max_retry_delay: opts[:max_retry_delay] || client.max_retry_delay,
+      retry_on: opts[:retry_on] || client.retry_on,
       req_opts: base_opts(client, opts)
     }
   end

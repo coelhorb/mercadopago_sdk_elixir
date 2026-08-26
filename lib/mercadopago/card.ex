@@ -25,6 +25,17 @@ defmodule Mercadopago.Card do
     )
   end
 
+  @doc "Updates a stored card for the given customer."
+  @spec update(Client.t(), HTTP.id(), HTTP.id(), map(), keyword()) :: HTTP.response()
+  def update(%Client{} = client, customer_id, card_id, card_data, opts \\ []) do
+    HTTP.put(
+      client,
+      "/v1/customers/#{HTTP.encode_path_param(customer_id)}/cards/#{HTTP.encode_path_param(card_id)}",
+      card_data,
+      opts
+    )
+  end
+
   @doc "Deletes a stored card from the given customer."
   @spec delete(Client.t(), HTTP.id(), HTTP.id(), keyword()) :: HTTP.response()
   def delete(%Client{} = client, customer_id, card_id, opts \\ []) do

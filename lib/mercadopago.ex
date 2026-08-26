@@ -45,6 +45,9 @@ defmodule Mercadopago do
       jittered (default: 1_000)
     * `:max_retry_delay` - ceiling for the backoff, also capping a `Retry-After`
       sent by the server, in milliseconds (default: 8_000)
+    * `:retry_on` - HTTP statuses that make a GET worth retrying (default:
+      `[429, 500, 502, 503, 504]`). Retryable transport failures are retried
+      whatever this says; it only narrows or widens the statuses.
     * `:custom_headers` - extra headers merged into every request, overriding
       generated headers case-insensitively (default: %{})
     * `:corporation_id` - MercadoPago x-corporation-id header
@@ -64,6 +67,7 @@ defmodule Mercadopago do
       max_retries: Keyword.get(opts, :max_retries, 3),
       retry_delay: Keyword.get(opts, :retry_delay, 1_000),
       max_retry_delay: Keyword.get(opts, :max_retry_delay, 8_000),
+      retry_on: Keyword.get(opts, :retry_on, Client.default_retry_on()),
       custom_headers: Keyword.get(opts, :custom_headers, %{}),
       corporation_id: opts[:corporation_id],
       integrator_id: opts[:integrator_id],

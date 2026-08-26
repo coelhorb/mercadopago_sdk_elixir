@@ -291,6 +291,140 @@ defmodule Mercadopago.HTTPTest do
     end
   end
 
+  describe "retry_on" do
+    test "retries a status that is only retryable because retry_on says so" do
+      parent = self()
+
+      Req.Test.stub(:http_retry_on_custom, fn conn ->
+        send(parent, :request)
+
+        conn
+        |> Plug.Conn.put_status(418)
+        |> Req.Test.json(%{"error" => "teapot"})
+      end)
+
+      client = new(:http_retry_on_custom)
+
+      assert {:ok, %{status: 418}} =
+               Mercadopago.HTTP.get(client, "/v1/anything", nil,
+                 retry_on: [418],
+                 max_retries: 2,
+                 retry_delay: 0
+               )
+
+      assert_received :request
+      assert_received :request
+      refute_received :request
+    end
+
+    test "a narrowed retry_on stops a default status from being retried" do
+      parent = self()
+
+      Req.Test.stub(:http_retry_on_narrowed, fn conn ->
+        send(parent, :request)
+
+        conn
+        |> Plug.Conn.put_status(503)
+        |> Req.Test.json(%{"error" => "unavailable"})
+      end)
+
+      client = new(:http_retry_on_narrowed)
+
+      assert {:ok, %{status: 503}} =
+               Mercadopago.HTTP.get(client, "/v1/anything", nil,
+                 retry_on: [429],
+                 max_retries: 3,
+                 retry_delay: 0
+               )
+
+      assert_received :request
+      refute_received :request
+    end
+
+    test "the client-level retry_on applies without a per-call override" do
+      parent = self()
+
+      Req.Test.stub(:http_retry_on_client, fn conn ->
+        send(parent, :request)
+
+        conn
+        |> Plug.Conn.put_status(503)
+        |> Req.Test.json(%{"error" => "unavailable"})
+      end)
+
+      client = new(:http_retry_on_client, retry_on: [429], retry_delay: 0)
+
+      assert {:ok, %{status: 503}} = Mercadopago.HTTP.get(client, "/v1/anything")
+
+      assert_received :request
+      refute_received :request
+    end
+
+    test "a transport failure is retried whatever retry_on says" do
+      counter = :counters.new(1, [])
+
+      Req.Test.stub(:http_retry_on_transport, fn conn ->
+        case :counters.get(counter, 1) do
+          0 ->
+            :counters.add(counter, 1, 1)
+            Req.Test.transport_error(conn, :closed)
+
+          _settled ->
+            Req.Test.json(conn, %{"ok" => true})
+        end
+      end)
+
+      client = new(:http_retry_on_transport)
+
+      assert {:ok, %{status: 200, response: %{"ok" => true}}} =
+               Mercadopago.HTTP.get(client, "/v1/anything", nil,
+                 retry_on: [],
+                 max_retries: 2,
+                 retry_delay: 0
+               )
+    end
+  end
+
+  describe "response diagnostics" do
+    test "lifts x-request-id and Retry-After out of the headers" do
+      Req.Test.stub(:http_diagnostics, fn conn ->
+        conn
+        |> Plug.Conn.put_resp_header("x-request-id", "req-9f2c")
+        |> Plug.Conn.put_resp_header("retry-after", "30")
+        |> Plug.Conn.put_status(429)
+        |> Req.Test.json(%{"message" => "Too many requests"})
+      end)
+
+      client = new(:http_diagnostics)
+
+      assert {:ok, %{status: 429, request_id: "req-9f2c", retry_after: 30}} =
+               Mercadopago.HTTP.get(client, "/v1/anything", nil, max_retries: 1)
+    end
+
+    test "both are nil when the server sends neither header" do
+      Req.Test.stub(:http_no_diagnostics, fn conn ->
+        Req.Test.json(conn, %{"id" => 1})
+      end)
+
+      assert {:ok, %{status: 200, request_id: nil, retry_after: nil}} =
+               Mercadopago.HTTP.get(new(:http_no_diagnostics), "/v1/anything")
+    end
+
+    test "an HTTP-date Retry-After is reported as absent, not as a bogus number" do
+      Req.Test.stub(:http_http_date_retry_after, fn conn ->
+        conn
+        |> Plug.Conn.put_resp_header("retry-after", "Wed, 21 Oct 2026 07:28:00 GMT")
+        |> Plug.Conn.put_status(503)
+        |> Req.Test.json(%{"error" => "unavailable"})
+      end)
+
+      client = new(:http_http_date_retry_after)
+
+      assert {:ok, %{status: 503, retry_after: nil}} =
+               Mercadopago.HTTP.get(client, "/v1/anything", nil, max_retries: 1)
+    end
+  end
+
   describe "telemetry" do
     test "emits one span per attempt, without leaking the access token" do
       ref =
@@ -327,6 +461,38 @@ defmodule Mercadopago.HTTPTest do
                       %{path: ^path, attempt: 1, status: 500}}
 
       refute metadata |> inspect() |> String.contains?("test_token")
+    end
+
+    test "announces each retry with its delay and the status that caused it" do
+      ref = :telemetry_test.attach_event_handlers(self(), [[:mercadopago, :request, :retry]])
+      on_exit(fn -> :telemetry.detach(ref) end)
+
+      Req.Test.stub(:http_retry_event, fn conn ->
+        conn
+        |> Plug.Conn.put_status(502)
+        |> Req.Test.json(%{"error" => "bad gateway"})
+      end)
+
+      client = new(:http_retry_event)
+
+      assert {:ok, %{status: 502}} =
+               Mercadopago.HTTP.get(client, "/v1/retry-probe", nil,
+                 max_retries: 3,
+                 retry_delay: 0
+               )
+
+      path = "/v1/retry-probe"
+
+      assert_receive {[:mercadopago, :request, :retry], ^ref, %{delay: delay},
+                      %{method: :get, path: ^path, attempt: 0, status: 502}}
+
+      assert is_integer(delay) and delay >= 0
+
+      assert_receive {[:mercadopago, :request, :retry], ^ref, %{delay: _},
+                      %{path: ^path, attempt: 1, status: 502}}
+
+      # Three attempts means two retries — the last failure is returned, not retried.
+      refute_receive {[:mercadopago, :request, :retry], ^ref, _measurements, _metadata}
     end
 
     test "reports a transport failure as an error in the stop metadata" do
