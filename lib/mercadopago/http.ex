@@ -313,7 +313,9 @@ defmodule Mercadopago.HTTP do
       retry: false
     ]
 
-    req_opts = if client.finch, do: [finch: client.finch] ++ req_opts, else: req_opts
+    # Req 0.7 deprecated `finch: name` in favour of `finch: [name: name]`, and
+    # warns on every request that still uses the bare name.
+    req_opts = if client.finch, do: [finch: [name: client.finch]] ++ req_opts, else: req_opts
     if client.plug, do: [plug: client.plug] ++ req_opts, else: req_opts
   end
 

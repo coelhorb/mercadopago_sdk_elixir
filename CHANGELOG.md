@@ -5,6 +5,54 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.1]
+
+Dependency migration. No change to this SDK's own API — `Mercadopago.new/2`
+still takes `finch: MyPool` as a bare name.
+
+### Changed
+
+- **`req` moved from the `0.6` line to `~> 0.7.4`.** The old bound meant
+  `< 0.7.0`, so any application already on Req 0.7 could not resolve this SDK at
+  all. Verified by running the full `mix ci` against 0.7.4: everything the bound
+  was guarding survives untouched — `%Req.TransportError{}`,
+  `Req.Response.get_header/2`, `Req.Test.transport_error/2`, and the `:plug`,
+  `:params`, `:receive_timeout`, `:retry`, `:json` and `:form_multipart` options.
+
+  **This is the breaking part for consumers**: an application pinned to Req 0.6
+  can no longer use this version. Hex resolves that by falling back to 0.3.0
+  rather than failing, so the practical effect is being held at the older
+  release until Req is upgraded.
+
+  The bound stays inside a single Req minor deliberately. Req 0.8 is not a bump
+  away: it drops Jason in favour of `JSON.encode!/2`, replaces the `retry` step
+  with `Req.Retry`, and requires Elixir 1.18 — three minors above this SDK's
+  floor.
+
+- `jason` raised to `~> 1.4`. Nothing in `lib/` calls it; Req encodes `:json`
+  bodies and the tests decode with it. It cannot be scoped to `only: :test`,
+  because Req depends on it unconditionally and Mix rejects an `:only` narrower
+  than a transitive dependency's.
+
+- `telemetry` deliberately **left at `~> 1.0`**. Only `:telemetry.span/3` and
+  `:telemetry.execute/3` are used, both present since 1.0, and telemetry is
+  shared with Phoenix, Ecto, Finch and Plug — a higher floor would buy nothing
+  and could conflict in a consumer's tree.
+
+### Fixed
+
+- **The `:finch` option warned on every request under Req 0.7.** Req deprecated
+  `finch: name` in favour of `finch: [name: name]`; the SDK passed the bare
+  name, so any consumer using a dedicated Finch pool would have seen
+  `setting :finch to a Finch pool name is deprecated` logged on every single
+  call. The SDK's own `finch:` option is unchanged — the new shape is applied
+  internally.
+
+  This slipped through because no test exercised the `:finch` path: `:plug` and
+  `:finch` are mutually exclusive adapters and all 125 existing tests use
+  `:plug`. `test/mercadopago/finch_test.exs` now covers it, with a positive
+  control asserting the warning is still detectable.
+
 ## [0.3.0]
 
 Synced with the official Ruby SDK 3.4.0 (this SDK was at 3.2.1). See
@@ -165,6 +213,7 @@ No public function was removed or changed arity in this release.
 
 - Initial release.
 
+[0.3.1]: https://github.com/coelhorb/mercadopago_sdk_elixir/tree/v0.3.1
 [0.3.0]: https://github.com/coelhorb/mercadopago_sdk_elixir/tree/v0.3.0
 [0.2.1]: https://github.com/coelhorb/mercadopago_sdk_elixir/tree/v0.2.1
 [0.2.0]: https://github.com/coelhorb/mercadopago_sdk_elixir/tree/v0.2.0

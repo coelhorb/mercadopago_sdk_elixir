@@ -6,7 +6,7 @@ defmodule Mercadopago.MixProject do
   def project do
     [
       app: :mercadopago_sdk_elixir,
-      version: "0.3.0",
+      version: "0.3.1",
       elixir: "~> 1.15",
       start_permanent: Mix.env() == :prod,
       elixirc_paths: elixirc_paths(Mix.env()),
@@ -84,12 +84,22 @@ defmodule Mercadopago.MixProject do
 
   defp deps do
     [
-      # Req is pre-1.0 and breaks API across minors, so the range is bounded to
-      # the 0.6 line: the SDK matches on %Req.TransportError{} and calls
-      # Req.Response.get_header/2 and Req.Test.transport_error/2.
-      {:req, "~> 0.6.0"},
-      {:jason, "~> 1.2"},
+      # Req is pre-1.0 and breaks API across minors, so the range is bounded to a
+      # single line: the SDK matches on %Req.TransportError{}, calls
+      # Req.Response.get_header/2 and Req.Test.transport_error/2, and passes
+      # :plug, :finch, :receive_timeout, :params, :json and :form_multipart.
+      # 0.8 is not a bump away — it drops jason for JSON, replaces the retry step
+      # with Req.Retry, and requires Elixir 1.18, three minors above our floor.
+      {:req, "~> 0.7.4"},
+      # Only :telemetry.span/3 and :telemetry.execute/3 are used, both present
+      # since 1.0. Telemetry is shared with Phoenix, Ecto, Finch and Plug, so a
+      # higher floor here would buy nothing and could conflict in a consumer's
+      # tree.
       {:telemetry, "~> 1.0"},
+      # lib/ never calls Jason — Req encodes :json bodies and the tests decode
+      # with it. It cannot be scoped to :test: Req depends on it unconditionally,
+      # and Mix rejects an :only narrower than a transitive dependency's.
+      {:jason, "~> 1.4"},
       {:plug, "~> 1.0", only: :test},
       {:vibe_kit, "~> 0.1", only: [:dev, :test], runtime: false},
       {:ex_slop, "~> 0.4", only: [:dev, :test], runtime: false},
